@@ -1,0 +1,73 @@
+20:02:14.f DEBUG asyncio                        Using selector: KqueueSelector
+20:02:14.f INFO  livekit.agents                 starting worker
+20:02:14.f INFO  livekit.agents                 HTTP server listening on :60095
+20:02:14.f WARNING livekit.agents                 no warmed process available for job, waiting for one to be created
+20:02:14.f INFO  livekit.agents                 initializing job runner
+20:02:15.f DEBUG asyncio                        Using selector: KqueueSelector
+20:02:15.f INFO  livekit.agents                 job runner initialized
+20:02:15.f INFO  niceguy                        Connecting to room: console
+20:02:15.f DEBUG livekit.agents                 configuring session recording
+20:02:15.f DEBUG livekit.agents                 http_session(): creating a new httpclient ctx
+20:02:15.f DEBUG livekit.agents                 using audio io: `Console` -> `AgentSession` -> `TranscriptSynchronizer` -> `Console`
+20:02:15.f DEBUG livekit.agents                 using transcript io: `AgentSession` -> `TranscriptSynchronizer`
+20:02:15.f INFO  niceguy                        Waiting for trigger...
+20:02:15.f DEBUG livekit.plugins.deepgram       Established new Deepgram STT WebSocket connection:
+20:02:20.f DEBUG livekit.agents                 received user transcript
+20:02:20.f INFO  niceguy                        User said: I'm not sure what can you do for me.
+20:02:20.f INFO  niceguy                        Generating LLM response...
+20:02:22.f INFO  niceguy                        Raw LLM text: "I'm here to handle whatever you require, sir, from managing your schedule to researching complex topics. I like to think of myself as your personal digital aide—and, of course, just a nice guy looking"
+20:02:22.f INFO  niceguy                        Spoke: I'm here to handle whatever you require, sir, from managing your schedule to researching complex top
+20:02:22.f INFO  niceguy                        Thought signatures stored: ['function_call_4db3ab6c330e']
+20:02:22.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONV"}) [sig=True]
+20:02:22.f INFO  niceguy                        LLM set turn mode to: CONV
+20:02:22.f INFO  niceguy                        Tool result: Mode set.
+20:02:22.f INFO  niceguy                        Turn mode decided: CONV
+20:02:22.f INFO  niceguy                        Waiting for trigger...
+20:02:36.f DEBUG livekit.agents                 received user transcript
+20:02:36.f INFO  niceguy                        User said: Can you check my emails, please?
+20:02:36.f INFO  niceguy                        Generating LLM response...
+20:02:37.f WARNING niceguy                        LLM error (attempt 1/3), retrying: gemini llm: server error
+20:02:39.f INFO  niceguy                        Raw LLM text: "I'll look into your inbox right away, sir. I'll see what's arrived and summarize anything that requires your attention.\n\n"
+20:02:39.f INFO  niceguy                        Spoke: I'll look into your inbox right away, sir. I'll see what's arrived and summarize anything that requi
+20:02:39.f INFO  niceguy                        Thought signatures stored: ['function_call_4db3ab6c330e', 'function_call_7efc61a01cb2']
+20:02:39.f INFO  niceguy                        Tool call: dispatch_openclaw({"directive": "Check the user's recent emails and summarize the most important ones."}) [sig=True]
+20:02:39.f INFO  niceguy                        LLM dispatched directive: Check the user's recent emails and summarize the most important ones.
+20:02:39.f INFO  niceguy                        Tool result: Dispatched.
+20:02:39.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "ACKWAIT"}) [sig=False]
+20:02:39.f INFO  niceguy                        LLM set turn mode to: ACKWAIT
+20:02:39.f INFO  niceguy                        Tool result: Mode set.
+20:02:39.f INFO  niceguy                        Turn mode decided: ACKWAIT
+20:02:39.f INFO  niceguy                        Waiting for trigger...
+20:02:39.f INFO  niceguy                        Queue update triggered
+20:02:39.f INFO  niceguy                        Generating LLM response...
+20:02:40.f INFO  niceguy                        Thought signatures stored: ['function_call_4db3ab6c330e', 'function_call_7efc61a01cb2', 'function_call_bf32439108d7']
+20:02:40.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "ACKWAIT"}) [sig=True]
+20:02:40.f INFO  niceguy                        LLM set turn mode to: ACKWAIT
+20:02:40.f INFO  niceguy                        Tool result: Mode set.
+20:02:40.f INFO  niceguy                        Turn mode decided: ACKWAIT
+20:02:40.f INFO  niceguy                        Waiting for trigger...
+20:02:40.f INFO  niceguy                        Queue update triggered
+20:02:40.f INFO  niceguy                        Generating LLM response...
+20:02:42.f WARNING niceguy                        LLM error (attempt 1/3), retrying: gemini llm: server error
+20:02:45.f WARNING niceguy                        LLM error (attempt 2/3), retrying: gemini llm: server error
+20:02:48.f ERROR niceguy                        LLM failed after 3 attempts: gemini llm: server error
+20:02:48.f INFO  niceguy                        Waiting for trigger...
+20:02:48.f INFO  niceguy                        Queue update triggered
+20:02:48.f INFO  niceguy                        Generating LLM response...
+20:02:49.f INFO  niceguy                        Raw LLM text: "It seems you have a few recent messages, including an urgent update regarding your flight tonight and a dinner invitation from Mr. Henderson. There's also a memo from your project team about tomorrow'"
+20:02:49.f INFO  niceguy                        Spoke: It seems you have a few recent messages, including an urgent update regarding your flight tonight an
+20:02:49.f INFO  niceguy                        Thought signatures stored: ['function_call_4db3ab6c330e', 'function_call_7efc61a01cb2', 'function_call_bf32439108d7', 'function_call_b8eec7a06e32']
+20:02:49.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONTINUE"}) [sig=True]
+20:02:49.f INFO  niceguy                        LLM set turn mode to: CONTINUE
+20:02:49.f INFO  niceguy                        Tool result: Mode set.
+20:02:49.f INFO  niceguy                        Turn mode decided: CONTINUE
+20:02:49.f INFO  niceguy                        Generating LLM response...
+20:02:50.f INFO  niceguy                        Raw LLM text: "I can draft a reply to any of these for you, sir. Or perhaps you'd like me to look into that flight update further?"
+20:02:50.f INFO  niceguy                        Spoke: I can draft a reply to any of these for you, sir. Or perhaps you'd like me to look into that flight 
+20:02:50.f INFO  niceguy                        Turn mode decided: CONV
+20:02:50.f INFO  niceguy                        Waiting for trigger...
+20:02:56.f INFO  livekit.agents                 shutting down worker
+20:02:58.f DEBUG livekit.agents                 session closed
+20:02:58.f DEBUG livekit.agents                 shutting down job task
+20:02:58.f DEBUG livekit.agents                 job exiting
+20:02:58.f DEBUG livekit.agents                 http_session(): closing the httpclient ctx

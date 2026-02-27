@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis-voice-agent"
+version = "1.0.0"
+description = "JARVIS voice agent with custom dual-trigger loop"
+requires-python = ">=3.10, <3.15"
+
+dependencies = [
+    "livekit-agents[silero]~=1.4",
+    "livekit-plugins-deepgram~=1.4",
+    "livekit-plugins-google~=1.4",
+    "livekit-plugins-elevenlabs~=1.4",
+    "python-dotenv",
+    "aiohttp",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"

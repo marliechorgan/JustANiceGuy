@@ -1,0 +1,101 @@
+19:53:55.f DEBUG asyncio                        Using selector: KqueueSelector
+19:53:55.f INFO  livekit.agents                 starting worker
+19:53:55.f INFO  livekit.agents                 HTTP server listening on :59697
+19:53:55.f WARNING livekit.agents                 no warmed process available for job, waiting for one to be created
+19:53:55.f INFO  livekit.agents                 initializing job runner
+19:53:55.f DEBUG asyncio                        Using selector: KqueueSelector
+19:53:55.f INFO  livekit.agents                 job runner initialized
+19:53:55.f INFO  niceguy                        Connecting to room: console
+19:53:55.f DEBUG livekit.agents                 configuring session recording
+19:53:55.f DEBUG livekit.agents                 http_session(): creating a new httpclient ctx
+19:53:55.f DEBUG livekit.agents                 using audio io: `Console` -> `AgentSession` -> `TranscriptSynchronizer` -> `Console`
+19:53:55.f DEBUG livekit.agents                 using transcript io: `AgentSession` -> `TranscriptSynchronizer`
+19:53:56.f INFO  niceguy                        Waiting for trigger...
+19:53:56.f DEBUG livekit.plugins.deepgram       Established new Deepgram STT WebSocket connection:
+19:54:01.f DEBUG livekit.agents                 received user transcript
+19:54:01.f INFO  niceguy                        User said: Can you please check my emails?
+19:54:01.f INFO  niceguy                        Generating LLM response...
+19:54:02.f INFO  niceguy                        Tool call: dispatch_openclaw({"directive": "Check the user's latest emails and provide a brief summary of the most important ones."})
+19:54:02.f INFO  niceguy                        LLM dispatched directive: Check the user's latest emails and provide a brief summary of the most important ones.
+19:54:02.f INFO  niceguy                        Tool result: Dispatched.
+19:54:02.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "ACKWAIT"})
+19:54:02.f INFO  niceguy                        LLM set turn mode to: ACKWAIT
+19:54:02.f INFO  niceguy                        Tool result: Mode set.
+19:54:02.f INFO  niceguy                        Turn mode decided: ACKWAIT
+19:54:02.f INFO  niceguy                        Waiting for trigger...
+19:54:02.f INFO  niceguy                        Queue update triggered
+19:54:02.f INFO  niceguy                        Generating LLM response...
+19:54:03.f ERROR livekit.agents                 unhandled exception while running the job task
+Traceback (most recent call last):
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/livekit/plugins/google/llm.py", line 445, in _run
+    stream = await self._client.aio.models.generate_content_stream(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/google/genai/models.py", line 7639, in generate_content_stream
+    response = await self._generate_content_stream(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/google/genai/models.py", line 6335, in _generate_content_stream
+    response_stream = await self._api_client.async_request_streamed(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/google/genai/_api_client.py", line 1459, in async_request_streamed
+    response = await self._async_request(http_request=http_request, stream=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/google/genai/_api_client.py", line 1375, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/tenacity/__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          ^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/tenacity/__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/.local/share/uv/python/cpython-3.12.11-macos-aarch64-none/lib/python3.12/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/.local/share/uv/python/cpython-3.12.11-macos-aarch64-none/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/google/genai/_api_client.py", line 1291, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/google/genai/errors.py", line 216, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/google/genai/errors.py", line 238, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 400 Bad Request. {'message': '{\n  "error": {\n    "code": 400,\n    "message": "Function call is missing a thought_signature in functionCall parts. This is required for tools to work correctly, and missing thought_signature may lead to degraded model performance. Additional data, function call `default_api:set_turn_mode` , position 4. Please refer to https://ai.google.dev/gemini-api/docs/thought-signatures for more details.",\n    "status": "INVALID_ARGUMENT"\n  }\n}\n', 'status': 'Bad Request'}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/opentelemetry/util/_decorator.py", line 71, in async_wrapper
+    return await func(*args, **kwargs)  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/livekit/agents/ipc/job_proc_lazy_main.py", line 306, in _traceable_entrypoint
+    await self._job_entrypoint_fnc(job_ctx)
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/src/agent.py", line 291, in entrypoint
+    async for chunk in response:
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/livekit/agents/llm/llm.py", line 372, in __anext__
+    raise exc  # noqa: B904
+    ^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/livekit/agents/llm/llm.py", line 188, in _traceable_main_task
+    await self._main_task()
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/livekit/agents/llm/llm.py", line 213, in _main_task
+    return await self._run()
+           ^^^^^^^^^^^^^^^^^
+  File "/Users/charliemorgan/JustANiceGuy/jarvis/.venv/lib/python3.12/site-packages/livekit/plugins/google/llm.py", line 513, in _run
+    raise APIStatusError(
+livekit.agents._exceptions.APIStatusError: gemini llm: client error
+19:54:05.f DEBUG livekit.agents                 session closed
+19:54:05.f DEBUG livekit.agents                 shutting down job task
+19:54:05.f DEBUG livekit.agents                 job exiting
+19:54:05.f DEBUG livekit.agents                 http_session(): closing the httpclient ctx
+19:54:14.f INFO  livekit.agents                 shutting down worker

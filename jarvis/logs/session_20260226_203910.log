@@ -1,0 +1,229 @@
+20:39:10.f DEBUG asyncio                        Using selector: KqueueSelector
+20:39:10.f INFO  livekit.agents                 starting worker
+20:39:10.f INFO  livekit.agents                 HTTP server listening on :61936
+20:39:10.f WARNING livekit.agents                 no warmed process available for job, waiting for one to be created
+20:39:10.f INFO  livekit.agents                 initializing job runner
+20:39:10.f DEBUG asyncio                        Using selector: KqueueSelector
+20:39:10.f INFO  livekit.agents                 job runner initialized
+20:39:10.f INFO  niceguy                        Connecting to room: console
+20:39:11.f DEBUG livekit.agents                 configuring session recording
+20:39:11.f DEBUG livekit.agents                 http_session(): creating a new httpclient ctx
+20:39:11.f DEBUG livekit.agents                 using audio io: `Console` -> `AgentSession` -> `TranscriptSynchronizer` -> `Console`
+20:39:11.f DEBUG livekit.agents                 using transcript io: `AgentSession` -> `TranscriptSynchronizer`
+20:39:11.f INFO  niceguy                        Waiting for trigger...
+20:39:11.f DEBUG livekit.plugins.deepgram       Established new Deepgram STT WebSocket connection:
+20:39:13.f DEBUG livekit.agents                 received user transcript
+20:39:14.f INFO  niceguy                        User said: So
+20:39:14.f INFO  niceguy                        Generating LLM response...
+20:39:15.f INFO  niceguy                        Raw LLM text: 'At your service, sir. How may I be of assistance today?\n\n'
+20:39:15.f INFO  niceguy                        Spoke: At your service, sir. How may I be of assistance today?
+20:39:15.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725']
+20:39:15.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONV"}) [sig=True]
+20:39:15.f INFO  niceguy                        LLM set turn mode to: CONV
+20:39:15.f INFO  niceguy                        Tool result: Mode set.
+20:39:15.f INFO  niceguy                        Waiting for TTS playout...
+20:39:17.f INFO  niceguy                        TTS playout complete.
+20:39:17.f INFO  niceguy                        Turn mode decided: CONV
+20:39:17.f INFO  niceguy                        Waiting for trigger...
+20:39:21.f DEBUG livekit.agents                 received user transcript
+20:39:21.f INFO  niceguy                        User said: I'm not sure. Well, how can you be of assistance?
+20:39:21.f INFO  niceguy                        Generating LLM response...
+20:39:22.f INFO  niceguy                        Raw LLM text: "I can manage your schedule, retrieve information, or coordinate complex tasks across your digital life, sir. Essentially, I'm here to ensure your day runs as smoothly as possible."
+20:39:22.f INFO  niceguy                        Spoke: I can manage your schedule, retrieve information, or coordinate complex tasks across your digital li
+20:39:22.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933']
+20:39:22.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONTINUE"}) [sig=True]
+20:39:22.f INFO  niceguy                        LLM set turn mode to: CONTINUE
+20:39:22.f INFO  niceguy                        Tool result: Mode set.
+20:39:22.f INFO  niceguy                        Waiting for TTS playout...
+20:39:31.f INFO  niceguy                        TTS playout complete.
+20:39:31.f INFO  niceguy                        Turn mode decided: CONTINUE
+20:39:31.f INFO  niceguy                        Generating LLM response...
+20:39:32.f INFO  niceguy                        Raw LLM text: 'Is there anything specific on your mind, or shall we look into your upcoming commitments?'
+20:39:32.f INFO  niceguy                        Spoke: Is there anything specific on your mind, or shall we look into your upcoming commitments?
+20:39:32.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9']
+20:39:32.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONV"}) [sig=True]
+20:39:32.f INFO  niceguy                        LLM set turn mode to: CONV
+20:39:32.f INFO  niceguy                        Tool result: Mode set.
+20:39:32.f INFO  niceguy                        Waiting for TTS playout...
+20:39:36.f INFO  niceguy                        TTS playout complete.
+20:39:36.f INFO  niceguy                        Turn mode decided: CONV
+20:39:36.f INFO  niceguy                        Waiting for trigger...
+20:39:42.f DEBUG livekit.agents                 received user transcript
+20:39:42.f DEBUG livekit.agents                 received user transcript
+20:39:43.f INFO  niceguy                        User said: I don't know. What can you please check my emails?
+20:39:43.f INFO  niceguy                        Generating LLM response...
+20:39:44.f INFO  niceguy                        Raw LLM text: "I'll check your inbox immediately, sir. One moment while I retrieve your recent messages."
+20:39:44.f INFO  niceguy                        Spoke: I'll check your inbox immediately, sir. One moment while I retrieve your recent messages.
+20:39:44.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f']
+20:39:44.f INFO  niceguy                        Tool call: dispatch_openclaw({"directive": "Check the user's recent emails and provide a summary of anything urgent or important."}) [sig=True]
+20:39:44.f INFO  niceguy                        LLM dispatched directive: Check the user's recent emails and provide a summary of anything urgent or important.
+20:39:44.f INFO  niceguy                        Tool result: Dispatched.
+20:39:44.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "ACKWAIT"}) [sig=False]
+20:39:44.f INFO  niceguy                        LLM set turn mode to: ACKWAIT
+20:39:44.f INFO  niceguy                        Tool result: Mode set.
+20:39:44.f INFO  niceguy                        Waiting for TTS playout...
+20:39:48.f INFO  niceguy                        TTS playout complete.
+20:39:48.f INFO  niceguy                        Turn mode decided: ACKWAIT
+20:39:48.f INFO  niceguy                        Waiting for trigger...
+20:39:51.f INFO  niceguy.openclaw               OpenClaw completed in 7.4s (exit=0)
+20:39:51.f INFO  niceguy.openclaw               OpenClaw result: status=ok, payloads=1, model=gemini-3-flash-preview, duration=5835ms
+20:39:51.f INFO  niceguy.openclaw               OpenClaw summary: I've dispatched a sub-agent to check for any new urgent or important emails that have landed in the last few minutes since our previous check. I'll summarize anything critical, particularly any messag
+20:39:51.f INFO  niceguy                        Queue update triggered
+20:39:51.f INFO  niceguy                        Flushing 2 queue items to chat_ctx:
+[STATUS_UPDATE | openclaw_router | 2026-02-26T20:39:44.443750+00:00]
+Dispatching to OpenClaw: Check the user's recent emails and provide a summary of anything urgent or important....
+
+[AGENT_RESULT | openclaw | 2026-02-26T20:39:51.880108+00:00]
+I've dispatched a sub-agent to check for any new urgent
+20:39:51.f INFO  niceguy                        Generating LLM response...
+20:39:53.f INFO  niceguy                        Raw LLM text: "It appears things are relatively quiet at the moment, sir, with no new messages since your last check. However, Gus has confirmed that your Helix pull request is ready to merge whenever you're incline"
+20:39:53.f INFO  niceguy                        Spoke: It appears things are relatively quiet at the moment, sir, with no new messages since your last chec
+20:39:53.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71']
+20:39:53.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONTINUE"}) [sig=True]
+20:39:53.f INFO  niceguy                        LLM set turn mode to: CONTINUE
+20:39:53.f INFO  niceguy                        Tool result: Mode set.
+20:39:53.f INFO  niceguy                        Waiting for TTS playout...
+20:40:03.f INFO  niceguy                        TTS playout complete.
+20:40:03.f INFO  niceguy                        Turn mode decided: CONTINUE
+20:40:03.f INFO  niceguy                        Generating LLM response...
+20:40:05.f INFO  niceguy                        Raw LLM text: 'I should also remind you that the Revolut request for information is still flagged as important, and your Huel delivery is currently in transit. Shall I assist you with that merge, or perhaps look int'
+20:40:05.f INFO  niceguy                        Spoke: I should also remind you that the Revolut request for information is still flagged as important, and
+20:40:05.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71', 'function_call_09704293d58f']
+20:40:05.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONV"}) [sig=True]
+20:40:05.f INFO  niceguy                        LLM set turn mode to: CONV
+20:40:05.f INFO  niceguy                        Tool result: Mode set.
+20:40:05.f INFO  niceguy                        Waiting for TTS playout...
+20:40:16.f INFO  niceguy                        TTS playout complete.
+20:40:16.f INFO  niceguy                        Turn mode decided: CONV
+20:40:16.f INFO  niceguy                        Waiting for trigger...
+20:40:19.f DEBUG livekit.agents                 received user transcript
+20:40:19.f INFO  niceguy                        User said: You write a draft back to Hugh?
+20:40:19.f INFO  niceguy                        Generating LLM response...
+20:40:21.f INFO  niceguy                        Raw LLM text: "I'll get right on that, sir. One moment while I pull up the relevant context and prepare a draft for your review."
+20:40:21.f INFO  niceguy                        Spoke: I'll get right on that, sir. One moment while I pull up the relevant context and prepare a draft for
+20:40:21.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71', 'function_call_09704293d58f', 'function_call_1c06366851fe']
+20:40:21.f INFO  niceguy                        Tool call: dispatch_openclaw({"directive": "Find the most recent email from Hugh and draft a polite, professional reply based on the context of his message."}) [sig=True]
+20:40:21.f INFO  niceguy                        LLM dispatched directive: Find the most recent email from Hugh and draft a polite, professional reply based on the context of his message.
+20:40:21.f INFO  niceguy                        Tool result: Dispatched.
+20:40:21.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "ACKWAIT"}) [sig=False]
+20:40:21.f INFO  niceguy                        LLM set turn mode to: ACKWAIT
+20:40:21.f INFO  niceguy                        Tool result: Mode set.
+20:40:21.f INFO  niceguy                        Waiting for TTS playout...
+20:40:26.f INFO  niceguy                        TTS playout complete.
+20:40:26.f INFO  niceguy                        Turn mode decided: ACKWAIT
+20:40:26.f INFO  niceguy                        Waiting for trigger...
+20:40:26.f INFO  niceguy.openclaw               OpenClaw completed in 5.4s (exit=0)
+20:40:26.f INFO  niceguy.openclaw               OpenClaw result: status=ok, payloads=1, model=gemini-3-flash-preview, duration=3872ms
+20:40:26.f INFO  niceguy.openclaw               OpenClaw summary: I've got a sub-agent searching your inbox for that email from Hugh now. I'll analyze the context and have a draft ready for your review in a moment.
+
+As a reminder, I'll never send the reply myself—I'
+20:40:26.f INFO  niceguy                        Queue update triggered
+20:40:26.f INFO  niceguy                        Flushing 2 queue items to chat_ctx:
+[STATUS_UPDATE | openclaw_router | 2026-02-26T20:40:21.113619+00:00]
+Dispatching to OpenClaw: Find the most recent email from Hugh and draft a polite, professional reply based on the context of ...
+
+[AGENT_RESULT | openclaw | 2026-02-26T20:40:26.553892+00:00]
+I've got a sub-agent searching your inbo
+20:40:26.f INFO  niceguy                        Generating LLM response...
+20:40:27.f INFO  niceguy                        Raw LLM text: "I'm still waiting for the sub-agent to retrieve the specific content of Hugh's message, sir. As soon as I have the details, I'll prepare a draft for your approval."
+20:40:27.f INFO  niceguy                        Spoke: I'm still waiting for the sub-agent to retrieve the specific content of Hugh's message, sir. As soon
+20:40:27.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71', 'function_call_09704293d58f', 'function_call_1c06366851fe', 'function_call_69e1da0dffc4']
+20:40:27.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "ACKWAIT"}) [sig=True]
+20:40:27.f INFO  niceguy                        LLM set turn mode to: ACKWAIT
+20:40:27.f INFO  niceguy                        Tool result: Mode set.
+20:40:27.f INFO  niceguy                        Waiting for TTS playout...
+20:40:35.f INFO  niceguy                        TTS playout complete.
+20:40:35.f INFO  niceguy                        Turn mode decided: ACKWAIT
+20:40:35.f WARNING niceguy                        ACKWAIT but nothing pending — falling back to CONV
+20:40:35.f INFO  niceguy                        Waiting for trigger...
+20:41:13.f DEBUG livekit.agents                 received user transcript
+20:41:14.f INFO  niceguy                        User said: Can you please look up, uh, the latest news around Iran, please?
+20:41:14.f INFO  niceguy                        Generating LLM response...
+20:41:15.f INFO  niceguy                        Raw LLM text: "I'll look into the latest developments regarding Iran immediately, sir. One moment while I gather the current headlines for you."
+20:41:15.f INFO  niceguy                        Spoke: I'll look into the latest developments regarding Iran immediately, sir. One moment while I gather th
+20:41:15.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71', 'function_call_09704293d58f', 'function_call_1c06366851fe', 'function_call_69e1da0dffc4', 'function_call_58db486b4f87']
+20:41:15.f INFO  niceguy                        Tool call: dispatch_openclaw({"directive": "Search for the latest international news and updates regarding Iran as of February 26, 2026."}) [sig=True]
+20:41:15.f INFO  niceguy                        LLM dispatched directive: Search for the latest international news and updates regarding Iran as of February 26, 2026.
+20:41:15.f INFO  niceguy                        Tool result: Dispatched.
+20:41:15.f INFO  niceguy                        Waiting for TTS playout...
+20:41:21.f INFO  niceguy                        TTS playout complete.
+20:41:21.f INFO  niceguy                        Turn mode decided: ACKWAIT
+20:41:21.f INFO  niceguy                        Waiting for trigger...
+20:41:50.f INFO  niceguy.openclaw               OpenClaw completed in 34.4s (exit=0)
+20:41:50.f INFO  niceguy.openclaw               OpenClaw result: status=ok, payloads=1, model=gemini-3-flash-preview, duration=33516ms
+20:41:50.f INFO  niceguy.openclaw               OpenClaw summary: As of **February 26, 2026**, the situation regarding Iran is marked by high-stakes diplomacy and significant internal unrest. Here are the key international updates:
+
+### 1. **Geneva Nuclear Talks: "S
+20:41:50.f INFO  niceguy                        Queue update triggered
+20:41:50.f INFO  niceguy                        Flushing 2 queue items to chat_ctx:
+[STATUS_UPDATE | openclaw_router | 2026-02-26T20:41:15.646787+00:00]
+Dispatching to OpenClaw: Search for the latest international news and updates regarding Iran as of February 26, 2026....
+
+[AGENT_RESULT | openclaw | 2026-02-26T20:41:50.033299+00:00]
+As of **February 26, 2026**, the situation regar
+20:41:50.f INFO  niceguy                        Generating LLM response...
+20:41:51.f INFO  niceguy                        Raw LLM text: 'The situation in Iran is quite tense, sir. Significant progress was reportedly made in Geneva today during indirect nuclear talks, which are being described as a "last-ditch effort" to reach an agreem'
+20:41:51.f INFO  niceguy                        Spoke: The situation in Iran is quite tense, sir. Significant progress was reportedly made in Geneva today 
+20:41:51.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71', 'function_call_09704293d58f', 'function_call_1c06366851fe', 'function_call_69e1da0dffc4', 'function_call_58db486b4f87', 'function_call_b0b3856d6f8d']
+20:41:51.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONV"}) [sig=True]
+20:41:51.f INFO  niceguy                        LLM set turn mode to: CONV
+20:41:51.f INFO  niceguy                        Tool result: Mode set.
+20:41:51.f INFO  niceguy                        Waiting for TTS playout...
+20:42:21.f INFO  niceguy                        TTS playout complete.
+20:42:21.f INFO  niceguy                        Turn mode decided: CONV
+20:42:21.f INFO  niceguy                        Waiting for trigger...
+20:42:26.f DEBUG livekit.agents                 received user transcript
+20:42:29.f DEBUG livekit.agents                 received user transcript
+20:42:29.f INFO  niceguy                        User said: No. It's alright. What do I have in my eve our message?
+20:42:29.f INFO  niceguy                        Generating LLM response...
+20:42:30.f INFO  niceguy                        Raw LLM text: "I'm sorry, sir, I didn't quite catch that. Were you referring to your recent messages or perhaps an event in your calendar?"
+20:42:30.f INFO  niceguy                        Spoke: I'm sorry, sir, I didn't quite catch that. Were you referring to your recent messages or perhaps an 
+20:42:30.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71', 'function_call_09704293d58f', 'function_call_1c06366851fe', 'function_call_69e1da0dffc4', 'function_call_58db486b4f87', 'function_call_b0b3856d6f8d', 'function_call_3d1f01bf3eb2']
+20:42:30.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONV"}) [sig=True]
+20:42:30.f INFO  niceguy                        LLM set turn mode to: CONV
+20:42:30.f INFO  niceguy                        Tool result: Mode set.
+20:42:30.f INFO  niceguy                        Waiting for TTS playout...
+20:42:36.f INFO  niceguy                        TTS playout complete.
+20:42:36.f INFO  niceguy                        Turn mode decided: CONV
+20:42:36.f INFO  niceguy                        Waiting for trigger...
+20:42:39.f DEBUG livekit.agents                 received user transcript
+20:42:39.f INFO  niceguy                        User said: No matter what, just check my least recent iMessages.
+20:42:39.f INFO  niceguy                        Generating LLM response...
+20:42:40.f INFO  niceguy                        Raw LLM text: "I'll check your most recent iMessages for you immediately, sir. One moment while I retrieve them."
+20:42:40.f INFO  niceguy                        Spoke: I'll check your most recent iMessages for you immediately, sir. One moment while I retrieve them.
+20:42:40.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71', 'function_call_09704293d58f', 'function_call_1c06366851fe', 'function_call_69e1da0dffc4', 'function_call_58db486b4f87', 'function_call_b0b3856d6f8d', 'function_call_3d1f01bf3eb2', 'function_call_3c3771589c69']
+20:42:40.f INFO  niceguy                        Tool call: dispatch_openclaw({"directive": "Retrieve and summarize the most recent iMessages."}) [sig=True]
+20:42:40.f INFO  niceguy                        LLM dispatched directive: Retrieve and summarize the most recent iMessages.
+20:42:40.f INFO  niceguy                        Tool result: Dispatched.
+20:42:40.f INFO  niceguy                        Waiting for TTS playout...
+20:42:45.f INFO  niceguy                        TTS playout complete.
+20:42:45.f INFO  niceguy                        Turn mode decided: ACKWAIT
+20:42:45.f INFO  niceguy                        Waiting for trigger...
+20:42:52.f INFO  niceguy.openclaw               OpenClaw completed in 11.5s (exit=0)
+20:42:52.f INFO  niceguy.openclaw               OpenClaw result: status=ok, payloads=1, model=gemini-3-flash-preview, duration=9509ms
+20:42:52.f INFO  niceguy.openclaw               OpenClaw summary: I'm unable to retrieve your iMessages directly. Accessing the iMessage database on macOS requires explicit Full Disk Access permissions for the application, which I don't have in this environment.
+
+Ho
+20:42:52.f INFO  niceguy                        Queue update triggered
+20:42:52.f INFO  niceguy                        Flushing 2 queue items to chat_ctx:
+[STATUS_UPDATE | openclaw_router | 2026-02-26T20:42:40.773373+00:00]
+Dispatching to OpenClaw: Retrieve and summarize the most recent iMessages....
+
+[AGENT_RESULT | openclaw | 2026-02-26T20:42:52.231691+00:00]
+I'm unable to retrieve your iMessages directly. Accessing the iMessage database on macOS re
+20:42:52.f INFO  niceguy                        Generating LLM response...
+20:42:53.f INFO  niceguy                        Raw LLM text: "I'm afraid I don't have the necessary permissions to access your iMessages directly, sir. However, I can certainly check your Telegram messages or your recent Apple Notes if you think the information "
+20:42:53.f INFO  niceguy                        Spoke: I'm afraid I don't have the necessary permissions to access your iMessages directly, sir. However, I
+20:42:53.f INFO  niceguy                        Thought signatures stored: ['function_call_fd342dd95725', 'function_call_9e3e0f9ec933', 'function_call_5996daf1b8e9', 'function_call_acda1dc78d9f', 'function_call_adcdfb279f71', 'function_call_09704293d58f', 'function_call_1c06366851fe', 'function_call_69e1da0dffc4', 'function_call_58db486b4f87', 'function_call_b0b3856d6f8d', 'function_call_3d1f01bf3eb2', 'function_call_3c3771589c69', 'function_call_3ccc524e9251']
+20:42:53.f INFO  niceguy                        Tool call: set_turn_mode({"mode": "CONV"}) [sig=True]
+20:42:53.f INFO  niceguy                        LLM set turn mode to: CONV
+20:42:53.f INFO  niceguy                        Tool result: Mode set.
+20:42:53.f INFO  niceguy                        Waiting for TTS playout...
+20:43:05.f INFO  niceguy                        TTS playout complete.
+20:43:05.f INFO  niceguy                        Turn mode decided: CONV
+20:43:05.f INFO  niceguy                        Waiting for trigger...
+20:43:06.f INFO  livekit.agents                 shutting down worker
+20:43:08.f DEBUG livekit.agents                 session closed
+20:43:08.f DEBUG livekit.agents                 shutting down job task
+20:43:08.f DEBUG livekit.agents                 job exiting
+20:43:08.f DEBUG livekit.agents                 http_session(): closing the httpclient ctx
