@@ -29,3 +29,13 @@ env/
 # LiveKit model files (downloaded at runtime)
 *.onnx
 *.pt
+
+# Session logs (generated at runtime)
+logs/
+*.log
+
+# Lock files (generated — users should install from pyproject.toml)
+uv.lock
+
+# Backups
+.backup-*/
