@@ -33,4 +33,4 @@ echo -e "Press 'l' and Enter to toggle logs."
 echo -e "Press 'm' and Enter to toggle microphone mute.\n"
 
 # Run the agent in console mode (bypasses dev auto-restart so UI is cleaner)
-PYTHONPATH=src python src/agent.py dev
+PYTHONPATH=src python src/agent.py console
