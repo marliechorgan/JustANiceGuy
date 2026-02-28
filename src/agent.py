@@ -640,7 +640,7 @@ async def entrypoint(ctx: JobContext):
                 except Exception as e:
                     logger.warning("TTS playout error: %s", e)
                 finally:
-                    state["tts_playing"] = False  # Bug #1: Un-gate STT
+                    UIState.tts_playing = False  # Bug #1: Un-gate STT
 
             # --- Turn mode logic ---
             mode = tools.current_turn_mode
