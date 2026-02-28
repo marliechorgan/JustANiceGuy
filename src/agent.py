@@ -27,8 +27,12 @@ from livekit.plugins import deepgram, elevenlabs, google, silero
 from openclaw_client import dispatch_openclaw as dispatch_openclaw_real
 from openclaw_stub import dispatch_openclaw_stub
 from voice_queue import VoiceLLMQueue
+from cli_ui import UIState, setup_cli_ui
 
 load_dotenv()
+
+# Initialize the cool abstract pixelated CLI UI monkeypatches
+setup_cli_ui()
 
 # --- Per-session file logging ---
 _logs_dir = Path(__file__).resolve().parent.parent / "logs"
@@ -47,21 +51,6 @@ logging.getLogger().addHandler(_file_handler)
 
 logger = logging.getLogger("niceguy")
 logger.info("Session log: %s", _log_file)
-
-
-class ConsoleLogFilter(logging.Filter):
-    """Filters logs from reaching stdout when we want to show a clean UI.
-    File logs bypass this and always write to the session log."""
-    def __init__(self):
-        super().__init__()
-        self.show_logs = True
-
-    def filter(self, record):
-        if hasattr(record, "always_print"):
-            return True
-        return self.show_logs
-
-console_filter = ConsoleLogFilter()
 
 def build_system_prompt() -> str:
     """Build the system prompt with current date/time context."""
@@ -356,21 +345,9 @@ async def entrypoint(ctx: JobContext):
     # --- Speech queue: fed by AgentSession's conversation_item_added event ---
     speech_queue: asyncio.Queue[str] = asyncio.Queue()
     barge_in_event = asyncio.Event()
-    # Bug #1: Use a mutable dict for TTS gate — bare bool reassignment in the
-    # loop body would shadow the closure variable the callback reads.
-    state = {
-        "tts_playing": False,
-        "session_ended": False,
-        "stt_muted": False,
-        "ui_mode": False,
-        "last_user": "",
-        "last_agent": ""
-    }
-
-    # Hide logs from console if ui_mode is on
-    for handler in logging.getLogger().handlers:
-        if not isinstance(handler, logging.FileHandler):
-            handler.addFilter(console_filter)
+    
+    # We will use the global UIState for our UI hooks
+    session_ended = {"status": False}
 
     @session.on("conversation_item_added")
     def on_conversation_item_added(ev):
@@ -381,16 +358,16 @@ async def entrypoint(ctx: JobContext):
                 # Bug #1: Ignore STT transcripts while TTS is playing
                 # (prevents JARVIS hearing its own audio output)
                 # Also ignore after session has ended
-                if state["session_ended"]:
+                if session_ended["status"]:
                     return
-                if state["stt_muted"]:
+                if UIState.stt_muted:
                     logger.debug("Filtered STT while muted: %s", text_content[:60])
                     return
-                if state["tts_playing"]:
+                if UIState.tts_playing:
                     logger.debug("Filtered STT during TTS playout: %s", text_content[:60])
                     return
                 logger.info("User said: %s", text_content)
-                state["last_user"] = text_content
+                UIState.last_user = text_content
                 asyncio.create_task(speech_queue.put(text_content))
 
     @session.on("user_started_speaking")
@@ -400,10 +377,10 @@ async def entrypoint(ctx: JobContext):
     @session.on("close")
     def on_session_close():
         """Handle external shutdown (Ctrl+C, LiveKit disconnect)."""
-        if not state["session_ended"]:
+        if not session_ended["status"]:
             logger.info("Session close detected — setting shutdown flag")
-            state["session_ended"] = True
-            state["tts_playing"] = False
+            session_ended["status"] = True
+            UIState.tts_playing = False
             tools.cancel_inflight()
             # Cancel blocked wait tasks so main loop can exit
             for t in state.get("_tasks", []):
@@ -411,79 +388,6 @@ async def entrypoint(ctx: JobContext):
                     t.cancel()
 
     await session.start(agent, room=ctx.room)
-
-    async def keyboard_listener():
-        """Listen for CLI input to toggle mute state and logs."""
-        loop = asyncio.get_running_loop()
-        print("\n\n\033[96m=== JARVIS CONTROLS ===\033[0m")
-        print("\033[90m[m] Toggle Mute\033[0m")
-        print("\033[90m[l] Toggle Logs / UI Mode\033[0m")
-        print("\033[96m=======================\033[0m\n")
-        while not state["session_ended"]:
-            try:
-                # Run the blocking sys.stdin.readline in a separate thread
-                line = await loop.run_in_executor(None, sys.stdin.readline)
-                if line:
-                    line = line.strip().lower()
-                    if line == "m":
-                        state["stt_muted"] = not state["stt_muted"]
-                        if state["stt_muted"]:
-                            logger.info("🎤 Microphone MUTED (Type 'm' and press Enter to unmute)")
-                            if not state["ui_mode"]:
-                                print("\n\033[91m🎤 Microphone MUTED\033[0m")
-                        else:
-                            logger.info("🎤 Microphone UNMUTED")
-                            if not state["ui_mode"]:
-                                print("\n\033[92m🎤 Microphone UNMUTED\033[0m")
-                    elif line == "l":
-                        state["ui_mode"] = not state["ui_mode"]
-                        console_filter.show_logs = not state["ui_mode"]
-                        if not state["ui_mode"]:
-                            print("\033[2J\033[H", end="")
-                            print("\033[93m📜 Logs enabled.\033[0m")
-            except Exception as e:
-                logger.debug("Keyboard listener error: %s", e)
-                break
-
-    async def ui_renderer():
-        """Redraws the animated avatar when UI Mode is ON."""
-        import itertools
-        frames = [
-            "      ████████      \n    ██        ██    \n    ██  ████  ██    \n    ██  ████  ██    \n    ██        ██    \n    ██  ██████  ██  \n      ████████      ",
-            "      ████████      \n    ██        ██    \n    ██  ████  ██    \n    ██        ██    \n    ██  ██████  ██  \n    ██  ██████  ██  \n      ████████      ",
-            "      ████████      \n    ██        ██    \n    ██  ████  ██    \n    ██        ██    \n    ██   ████   ██  \n    ██          ██  \n      ████████      "
-        ]
-        cycle = itertools.cycle([1, 2])
-        while not state["session_ended"]:
-            await asyncio.sleep(0.15)
-            if state["ui_mode"]:
-                sys.stdout.write("\033[2J\033[H") # clear screen
-                sys.stdout.write("\n\n")
-                
-                color = "\033[96m" # Cyan (default)
-                if state["stt_muted"]:
-                    color = "\033[91m" # Red (muted)
-                
-                frame_idx = 0
-                if state["tts_playing"]:
-                    frame_idx = next(cycle)
-                
-                avatar_lines = frames[frame_idx].split('\n')
-                for line in avatar_lines:
-                    sys.stdout.write(f"          {color}{line}\033[0m\n")
-                sys.stdout.write("\n\n")
-                
-                if state["last_user"]:
-                    sys.stdout.write(f" \033[90mYou:\033[0m {state['last_user']}\n")
-                if state["last_agent"]:
-                    sys.stdout.write(f" \033[92mJARVIS:\033[0m {state['last_agent']}\n")
-                
-                sys.stdout.write("\n\n \033[90m Controls: [m] Mute  [l] View Logs\033[0m")
-                sys.stdout.flush()
-
-    # Start the background tasks
-    listener_task = asyncio.create_task(keyboard_listener())
-    ui_task = asyncio.create_task(ui_renderer())
 
     # Greeting — use session.say() which routes through AgentSession's audio pipeline
     await asyncio.sleep(0.5)
@@ -500,14 +404,16 @@ async def entrypoint(ctx: JobContext):
 
     speech_task = asyncio.create_task(wait_speech())
     queue_task = asyncio.create_task(wait_queue())
-    state["_tasks"] = [speech_task, queue_task, listener_task, ui_task]
+    
+    # Store local tasks array so it can be accessed by the session.close() cleanup routine
+    state = {"_tasks": [speech_task, queue_task]}
 
-    while not state["session_ended"]:
+    while not session_ended["status"]:
         logger.info("Waiting for trigger...")
         try:
             trigger = await wait_for_either(speech_task, queue_task)
         except (asyncio.CancelledError, Exception) as e:
-            if state["session_ended"]:
+            if session_ended["status"]:
                 logger.info("Main loop exiting — session ended during wait")
                 break
             raise
@@ -515,7 +421,7 @@ async def entrypoint(ctx: JobContext):
         is_speech = trigger != "QUEUE_UPDATE"
 
         if is_speech:
-            if state["session_ended"]:
+            if session_ended["status"]:
                 break
             # Bug #7: Small debounce window to collect buffered speech
             await asyncio.sleep(0.1)
@@ -574,7 +480,7 @@ async def entrypoint(ctx: JobContext):
                             yield token
 
                     # Start TTS immediately with the streaming generator
-                    state["tts_playing"] = True  # Bug #1: Gate STT
+                    UIState.tts_playing = True  # Bug #1: Gate STT
                     speech_handle = session.say(_text_stream(), add_to_chat_ctx=False)
 
                     async for chunk in response:
@@ -620,7 +526,7 @@ async def entrypoint(ctx: JobContext):
                         logger.error("LLM failed after 3 attempts: %s", e)
 
             if llm_error:
-                state["tts_playing"] = False  # Ensure STT gate is reset
+                UIState.tts_playing = False  # Ensure STT gate is reset
                 # Bug #2: Wrap in try/except — session may be closing
                 try:
                     session.say("Apologies sir, I seem to be having a moment. Could you try that again?", 
@@ -630,7 +536,7 @@ async def entrypoint(ctx: JobContext):
                 break  # Break CONTINUE loop, wait for next trigger
 
             if interrupted:
-                state["tts_playing"] = False  # Ensure STT gate is reset
+                UIState.tts_playing = False  # Ensure STT gate is reset
                 if hasattr(response, "aclose"):
                     await response.aclose()
                 await speech_handle.interrupt()
@@ -644,7 +550,7 @@ async def entrypoint(ctx: JobContext):
                 clean = _strip_tool_leaks(speech_text)
                 logger.info("Raw LLM text: %s", repr(speech_text[:200]))
                 logger.info("Spoke: %s", clean[:100])
-                state["last_agent"] = clean
+                UIState.last_agent = clean
 
             # --- Handle tool calls ---
             if tool_calls:
@@ -749,13 +655,12 @@ async def entrypoint(ctx: JobContext):
             elif mode == "END":
                 # Bug #10: Graceful shutdown
                 logger.info("Session ending — cleaning up...")
-                state["session_ended"] = True
-                state["tts_playing"] = False
+                session_ended["status"] = True
+                UIState.tts_playing = False
                 tools.cancel_inflight()
                 await asyncio.sleep(0.3)
                 speech_task.cancel()
                 queue_task.cancel()
-                listener_task.cancel()
                 try:
                     await ctx.room.disconnect()
                 except Exception:
@@ -764,10 +669,10 @@ async def entrypoint(ctx: JobContext):
 
     # --- Cleanup after main loop exits (e.g. Ctrl+C / session close) ---
     logger.info("Main loop exited — cleaning up...")
-    state["session_ended"] = True
-    state["tts_playing"] = False
+    session_ended["status"] = True
+    UIState.tts_playing = False
     tools.cancel_inflight()
-    for t in [speech_task, queue_task, listener_task]:
+    for t in [speech_task, queue_task]:
         if not t.done():
             t.cancel()
     logger.info("Shutdown complete.")
