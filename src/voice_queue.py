@@ -59,6 +59,10 @@ class VoiceLLMQueue:
         parts = []
         for item in results:
             cleaned_summary = _clean_for_voice(item.summary)
+            # Cap individual results to prevent ballooning LLM context
+            if len(cleaned_summary) > 2000:
+                _logger.info("Truncating agent result from %d to 2000 chars", len(cleaned_summary))
+                cleaned_summary = cleaned_summary[:2000] + "\n[...truncated]"
             parts.append(
                 f"[AGENT_RESULT | {item.agent} | "
                 f"{item.timestamp.isoformat()}]\n{cleaned_summary}"

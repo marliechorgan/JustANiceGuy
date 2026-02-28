@@ -70,6 +70,27 @@ def setup_cli_ui():
         levels = getattr(self, "_levels_idx", [0]*14)
         vol = sum(levels)
         
+        # When logs are visible, collapse to a minimal one-line status
+        if not UIState.ui_mode:
+            parts = ["JARVIS"]
+            if muted:
+                parts.append("[bold]MUTED[/bold]")
+            if UIState.llm_status:
+                parts.append(UIState.llm_status)
+            elif UIState.tts_status:
+                parts.append(UIState.tts_status)
+            elif UIState.openclaw_status:
+                parts.append(UIState.openclaw_status)
+            else:
+                parts.append("[dim]idle[/dim]")
+            errs = {k: v for k, v in UIState.session_errors.items() if v > 0}
+            if errs:
+                parts.append(" ".join(f"{k}:{v}" for k, v in errs.items()))
+            return Panel(
+                Align.center(Text.from_markup(" | ".join(parts))),
+                padding=(0, 1),
+            )
+        
         # Optimised 3D sphere with organic surface animation
         GX, GY = 40, 18
         chars = " .,:;+*#@"
