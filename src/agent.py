@@ -466,6 +466,8 @@ async def entrypoint(ctx: JobContext):
             # Retry up to 2 times for transient Gemini 500 errors
             for attempt in range(3):
                 try:
+                    import time as _time
+                    _llm_start = _time.monotonic()
                     response = llm_model.chat(chat_ctx=chat_ctx, tools=tools_context.flatten())
 
                     # Async channel for streaming text tokens → TTS in real-time
@@ -483,6 +485,7 @@ async def entrypoint(ctx: JobContext):
                     UIState.tts_playing = True  # Bug #1: Gate STT
                     speech_handle = session.say(_text_stream(), add_to_chat_ctx=False)
 
+                    _first_token = True
                     async for chunk in response:
                         if barge_in_event.is_set():
                             logger.info("Barge-in detected! Halting LLM.")
@@ -492,6 +495,10 @@ async def entrypoint(ctx: JobContext):
                         delta = chunk.delta
                         if delta:
                             if delta.content:
+                                if _first_token:
+                                    _ttfb = (_time.monotonic() - _llm_start) * 1000
+                                    logger.info("LLM TTFB: %.0fms", _ttfb)
+                                    _first_token = False
                                 speech_text += delta.content
                                 await text_queue.put(delta.content)
                             if delta.tool_calls:
