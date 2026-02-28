@@ -387,6 +387,25 @@ async def entrypoint(ctx: JobContext):
                 if t and not t.done():
                     t.cancel()
 
+    @session.on("error")
+    def on_session_error(ev):
+        """Catch errors from any pipeline component (STT, TTS, LLM)."""
+        source = getattr(ev, 'source', None)
+        error = getattr(ev, 'error', ev)
+        source_name = type(source).__name__ if source else "unknown"
+        
+        # Route to appropriate service error counter
+        if source_name in ("STT", "DeepgramSTT", "SpeechStream"):
+            UIState.session_errors["deepgram"] += 1
+            UIState.stt_status = f"STT Error: {type(error).__name__}"
+            logger.warning("Deepgram STT error: %s", error)
+        elif source_name in ("TTS", "ElevenLabsTTS", "SynthesizeStream"):
+            UIState.session_errors["elevenlabs"] += 1
+            UIState.tts_status = f"TTS Error: {type(error).__name__}"
+            logger.warning("ElevenLabs TTS error: %s", error)
+        else:
+            logger.warning("Pipeline error from %s: %s", source_name, error)
+
     await session.start(agent, room=ctx.room)
 
     # Greeting — use session.say() which routes through AgentSession's audio pipeline
@@ -500,6 +519,8 @@ async def entrypoint(ctx: JobContext):
                                 if _first_token:
                                     _ttfb = (_time.monotonic() - _llm_start) * 1000
                                     logger.info("LLM TTFB: %.0fms", _ttfb)
+                                    UIState.last_ttfb_ms = _ttfb
+                                    UIState.llm_status = "Streaming..."
                                     _first_token = False
                                 speech_text += delta.content
                                 await text_queue.put(delta.content)
@@ -516,10 +537,12 @@ async def entrypoint(ctx: JobContext):
                 except Exception as e:
                     llm_error = True
                     UIState.llm_error_count += 1
+                    UIState.session_errors["gemini"] += 1
                     
                     # Extract HTTP status code if available
                     _status = ""
                     _err_str = str(e)
+                    _body = getattr(e, 'body', '')
                     if hasattr(e, 'status_code') and e.status_code:
                         sc = e.status_code
                         if sc == 429:
@@ -538,7 +561,8 @@ async def entrypoint(ctx: JobContext):
                         _status = f"LLM Error (attempt {attempt+1}/3)"
                     
                     UIState.llm_status = _status
-                    logger.warning("LLM error [%s] (attempt %d/3): %s", _status, attempt + 1, e)
+                    logger.warning("LLM error [%s] (attempt %d/3): %s | body=%s", 
+                                   _status, attempt + 1, e, _body)
                     # Make sure the text stream is closed and SILENCED
                     try:
                         await text_queue.put(None)
@@ -673,11 +697,15 @@ async def entrypoint(ctx: JobContext):
             # --- Wait for TTS to finish playing before deciding next step ---
             if speech_text:
                 logger.info("Waiting for TTS playout...")
+                UIState.tts_status = "Speaking..."
                 try:
                     await speech_handle
                     logger.info("TTS playout complete.")
+                    UIState.tts_status = ""
                 except Exception as e:
                     logger.warning("TTS playout error: %s", e)
+                    UIState.session_errors["elevenlabs"] += 1
+                    UIState.tts_status = f"TTS Error: {type(e).__name__}"
                 finally:
                     UIState.tts_playing = False  # Bug #1: Un-gate STT
 

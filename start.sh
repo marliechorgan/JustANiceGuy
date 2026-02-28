@@ -1,36 +1,64 @@
 #!/usr/bin/env bash
 
-# JARVIS Start Script
-# This script makes it easy to run JARVIS in one click.
+# ──────────────────────────────────────────────
+# JARVIS — One-command startup
+# ──────────────────────────────────────────────
 
-# Ensure we are in the script's directory
+set -euo pipefail
 cd "$(dirname "$0")"
 
-# Colors for nice output
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+# Colors
+R='\033[0;31m'  G='\033[0;32m'  C='\033[0;36m'  D='\033[2m'  B='\033[1m'  NC='\033[0m'
 
-echo -e "${CYAN}Starting JARVIS...${NC}"
+echo -e "${C}${B}JARVIS${NC}"
+echo ""
 
-# Check for virtual environment
+# ── Virtual environment ──────────────────────
 if [ ! -d "venv" ]; then
-    echo "Virtual environment not found! Please run the setup steps in README.md first."
+    echo -e "${C}Creating virtual environment...${NC}"
+    python3 -m venv venv
+    source venv/bin/activate
+    echo -e "${C}Installing dependencies...${NC}"
+    pip install -e . --quiet
+    echo -e "${C}Downloading model files...${NC}"
+    python src/agent.py download-files 2>/dev/null || true
+    echo -e "${G}Setup complete.${NC}"
+else
+    source venv/bin/activate
+fi
+
+# ── Environment variables ────────────────────
+if [ ! -f ".env" ]; then
+    echo -e "${R}No .env file found.${NC}"
+    echo -e "Run: ${B}cp .env.example .env${NC} and add your API keys."
     exit 1
 fi
 
-# Activate venv
-source venv/bin/activate
+# Quick key validation
+source .env 2>/dev/null || true
+missing=()
+[ -z "${LIVEKIT_URL:-}" ]        && missing+=("LIVEKIT_URL")
+[ -z "${LIVEKIT_API_KEY:-}" ]    && missing+=("LIVEKIT_API_KEY")
+[ -z "${LIVEKIT_API_SECRET:-}" ] && missing+=("LIVEKIT_API_SECRET")
+[ -z "${GEMINI_API_KEY:-}" ]     && missing+=("GEMINI_API_KEY")
+[ -z "${DEEPGRAM_API_KEY:-}" ]   && missing+=("DEEPGRAM_API_KEY")
+[ -z "${ELEVENLABS_API_KEY:-}" ] && missing+=("ELEVENLABS_API_KEY")
 
-# Check for .env file
-if [ ! -f ".env" ]; then
-    echo "Warning: .env file not found. Copying from .env.example..."
-    cp .env.example .env
+if [ ${#missing[@]} -gt 0 ]; then
+    echo -e "${R}Missing required API keys in .env:${NC}"
+    for k in "${missing[@]}"; do
+        echo -e "  ${R}✗${NC} $k"
+    done
+    echo -e "\nSee .env.example for details."
+    exit 1
 fi
 
-echo -e "${GREEN}JARVIS is ready!${NC}"
-echo -e "Press 'l' and Enter to toggle logs."
-echo -e "Press 'm' and Enter to toggle microphone mute.\n"
+# ── Launch ───────────────────────────────────
+echo -e "${D}LLM:  ${GEMINI_MODEL:-gemini-3-flash-preview}${NC}"
+echo -e "${D}TTS:  ElevenLabs (${ELEVENLABS_MODEL:-eleven_flash_v2_5})${NC}"
+echo -e "${D}STT:  Deepgram${NC}"
+echo ""
+echo -e "${G}${B}Starting...${NC} ${D}Press [m] mute | [l] logs${NC}"
+echo ""
 
-# Run the agent in console mode (bypasses dev auto-restart so UI is cleaner)
 PYTHONPATH=src python src/agent.py console

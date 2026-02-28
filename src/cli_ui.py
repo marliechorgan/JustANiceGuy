@@ -1,3 +1,9 @@
+"""CLI UI — Monkey-patches LiveKit's console mode for an animated 3D sphere UI.
+
+Provides:
+- UIState: shared state between agent subprocess and parent UI process
+- setup_cli_ui(): patches LiveKit's FrequencyVisualizer and RichLoggingHandler
+"""
 import time
 import math
 import threading
@@ -9,15 +15,41 @@ from rich.live import Live
 import livekit.agents.cli.cli as lk_cli
 from livekit.agents.cli.readchar import key, readkey
 
+
 class UIState:
+    """Shared state between the agent subprocess and the CLI renderer."""
+    # Audio state
     tts_playing = False
     stt_muted = False
-    ui_mode = True # No logs by default
+    
+    # UI display mode (True = sphere only, False = sphere + logs)
+    ui_mode = True
+    
+    # Conversation transcript (last messages)
     last_user = ""
     last_agent = ""
+    
+    # Startup timestamp for expansion animation
     start_time = None
-    llm_status = ""  # e.g. "thinking...", "503 Server Error", "429 Rate Limited"
-    llm_error_count = 0
+    
+    # Service status — updated by agent.py in real-time
+    llm_status = ""         # "Thinking...", "503 Service Unavailable", etc.
+    llm_error_count = 0     # Consecutive errors in current request
+    tts_status = ""         # "Speaking...", "TTS Error", etc.
+    stt_status = ""         # "Listening...", "STT Error", etc.
+    openclaw_status = ""    # "Working...", "Timeout", etc.
+    
+    # Session-wide error tallies
+    session_errors = {
+        "gemini": 0,
+        "elevenlabs": 0,
+        "deepgram": 0,
+        "openclaw": 0,
+    }
+    
+    # Last TTFB for display
+    last_ttfb_ms = 0
+
 
 def setup_cli_ui():
     """Monkey-patches the LiveKit Agents CLI to provide a pixelated avatar UI."""
@@ -64,7 +96,7 @@ def setup_cli_ui():
         
         for y in range(GY):
             row = []
-            ny = (y - GY / 2.0) / (GY / 2.0) * 2.0  # aspect corrected
+            ny = (y - GY / 2.0) / (GY / 2.0) * 2.0
             ny2 = ny * ny
             for x in range(GX):
                 nx = (x - GX / 2.0) / (GX / 2.0)
@@ -72,33 +104,27 @@ def setup_cli_ui():
                 
                 if d2 < R * R:
                     nz = math.sqrt(R * R - d2)
-                    # Rotate around Y axis
                     rx = nx * cy + nz * sy
                     rz = -nx * sy + nz * cy
                     
-                    # Organic noise: overlapping sine waves on the rotated surface
                     noise = (
                         math.sin(rx * 8.0 + t * 3.0) * 0.3 +
                         math.sin(ny * 6.0 + t * 2.0) * 0.2 +
                         math.sin((rx + ny) * 5.0 - t * 4.0) * 0.2
                     )
                     
-                    # Base lighting from upper-left
                     light = max(0.0, nx * (-0.5) + ny * (-0.7) + nz * 0.5)
                     
                     if is_speaking:
-                        # Orbiting bright spot + heavy pulsing noise
                         ox = math.cos(t * 4.0) * 0.6
                         oy = math.sin(t * 4.0) * 0.6
                         spot = max(0.0, 1.0 - ((nx - ox)**2 + (ny - oy)**2) * 3.0)
                         light += spot * 0.7 + noise * 0.5 + 0.15
                     elif not muted and vol > 0:
-                        # Audio-reactive surface ripple
                         band = int((x / GX) * 14)
                         band = max(0, min(13, band))
                         light += levels[band] / 10.0 + noise * (vol / 40.0)
                     else:
-                        # Gentle idle breathing
                         light += noise * 0.15 + math.sin(t * 1.5) * 0.05
                     
                     idx = int(max(0.0, min(1.0, light)) * NC + 0.5)
@@ -114,12 +140,34 @@ def setup_cli_ui():
             lines.append("".join(row))
             
         lines.append("")
-        # Status line
+        
+        # --- Status line ---
+        status_parts = []
         if UIState.llm_status:
             if UIState.llm_error_count > 0:
-                lines.append(f"[bold reverse] {UIState.llm_status} [/bold reverse]")
+                status_parts.append(f"[bold reverse] {UIState.llm_status} [/bold reverse]")
             else:
-                lines.append(f"[dim]{UIState.llm_status}[/dim]")
+                status_parts.append(f"[dim]{UIState.llm_status}[/dim]")
+        if UIState.tts_status:
+            status_parts.append(f"[dim]{UIState.tts_status}[/dim]")
+        if UIState.openclaw_status:
+            status_parts.append(f"[dim]{UIState.openclaw_status}[/dim]")
+        if status_parts:
+            lines.append("  ".join(status_parts))
+        
+        # --- TTFB indicator ---
+        if UIState.last_ttfb_ms > 0 and not UIState.llm_status:
+            lines.append(f"[dim]Last TTFB: {UIState.last_ttfb_ms:.0f}ms[/dim]")
+        
+        # --- Service health bar ---
+        errs = UIState.session_errors
+        err_parts = []
+        for svc, count in errs.items():
+            if count > 0:
+                err_parts.append(f"{svc}:{count}")
+        if err_parts:
+            lines.append(f"[bold reverse] Errors: {' | '.join(err_parts)} [/bold reverse]")
+        
         lines.append("")
         if UIState.last_user:
             lines.append(f"[dim]You:[/dim] {UIState.last_user}")
@@ -159,7 +207,6 @@ def setup_cli_ui():
                 elif isinstance(ch, str) and ch.lower() == "l":
                     UIState.ui_mode = not UIState.ui_mode
                     if UIState.ui_mode:
-                        # Clear logs completely off the screen!
                         print("\033c", end="", flush=True)
 
         listener = threading.Thread(target=_listen_for_keys, daemon=True)
@@ -170,7 +217,6 @@ def setup_cli_ui():
             if UIState.ui_mode:
                 print("\033c", end="", flush=True)
 
-        # Check initial mute state
         c.set_microphone_enabled(not UIState.stt_muted, device=input_device)
         c.set_speaker_enabled(True, device=output_device)
 

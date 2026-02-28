@@ -17,6 +17,7 @@ import time
 import uuid
 
 from voice_queue import QueueItem, VoiceLLMQueue
+from cli_ui import UIState
 
 logger = logging.getLogger("niceguy.openclaw")
 
@@ -51,6 +52,7 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
     )
 
     start = time.monotonic()
+    UIState.openclaw_status = f"Dispatching: {directive[:40]}..."
 
     # Wrap directive with voice-specific context
     wrapped_directive = VOICE_DIRECTIVE_PREFIX + directive
@@ -104,6 +106,7 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
 
         elapsed = time.monotonic() - start
         logger.info("OpenClaw completed in %.1fs (exit=%s)", elapsed, proc.returncode)
+        UIState.openclaw_status = ""
 
         if proc.returncode != 0:
             error_msg = stderr.decode().strip() or f"Exit code {proc.returncode}"
@@ -120,6 +123,8 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
                     summary=f"OpenClaw encountered an error: {error_msg[:200]}",
                 )
             )
+            UIState.session_errors["openclaw"] += 1
+            UIState.openclaw_status = f"Error: {error_msg[:50]}"
             return
 
         # Parse the JSON response
@@ -219,6 +224,8 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
                 summary=f"OpenClaw timed out after {elapsed:.0f} seconds.",
             )
         )
+        UIState.session_errors["openclaw"] += 1
+        UIState.openclaw_status = f"Timeout ({elapsed:.0f}s)"
 
     except Exception as e:
         logger.error("OpenClaw dispatch error: %s", e, exc_info=True)
@@ -230,4 +237,6 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
                 summary=f"Failed to dispatch to OpenClaw: {e}",
             )
         )
+        UIState.session_errors["openclaw"] += 1
+        UIState.openclaw_status = f"Error: {type(e).__name__}"
 

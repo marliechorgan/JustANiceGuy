@@ -46,44 +46,40 @@ User speaks → STT transcript → Voice LLM → Streamed TTS (instant)
 ### Prerequisites
 
 - Python ≥ 3.10
-- Node ≥ 22 (for [OpenClaw](https://github.com/marliechorgan/openclaw))
+- Node ≥ 22 (for [OpenClaw](https://github.com/marliechorgan/openclaw) — optional)
 - API keys for: [LiveKit](https://cloud.livekit.io/), [Deepgram](https://console.deepgram.com/), [Google Gemini](https://aistudio.google.com/app/apikey), [ElevenLabs](https://elevenlabs.io/)
 
 ### Setup
 
 ```bash
-# 1. Clone the repo
+# 1. Clone and configure
 git clone https://github.com/marliechorgan/JustANiceGuy.git
 cd JustANiceGuy
+cp .env.example .env    # Fill in your API keys
 
-# 2. Install OpenClaw (the agent system JARVIS dispatches to)
-npm install -g openclaw@latest
-openclaw onboard --install-daemon
+# 2. (Optional) Install OpenClaw for real agent dispatch
+npm install -g openclaw@latest && openclaw onboard --install-daemon
 
-# 3. Create and activate a Python virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# 4. Install dependencies
-pip install -e .
-
-# 5. Download Silero VAD model files
-python src/agent.py download-files
-
-# 6. Configure environment variables
-cp .env.example .env
-# Edit .env and fill in your API keys
-
-# 7. Start JARVIS
+# 3. Start JARVIS (auto-creates venv, installs deps on first run)
 ./start.sh
 ```
 
 **Controls inside JARVIS:**
-- Press `m` to toggle microphone mute.
-- Press `l` to toggle the animated **CLI UI / Logs**.
+- Press `m` — toggle microphone mute
+- Press `l` — toggle between animated 3D sphere UI and raw logs
 
 > **Don't have OpenClaw?** Set `USE_OPENCLAW_STUB=true` in your `.env` to use
 > a built-in demo that simulates agent responses with Gemini.
+
+### CLI UI Features
+
+The 3D sphere visualization shows real-time system status:
+- **Idle** — gentle breathing animation
+- **Listening** — audio-reactive surface ripples from your microphone
+- **Speaking** — orbiting light sweep with pulsing noise
+- **LLM Status** — shows `Thinking...`, `Streaming...`, or error codes (`503 Service Unavailable`)
+- **Service Health** — error tallies per service (Gemini, ElevenLabs, Deepgram, OpenClaw)
+- **TTFB** — shows last time-to-first-byte from the LLM
 
 ### Test in the LiveKit Playground
 
