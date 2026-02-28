@@ -7,6 +7,7 @@ Provides:
 import time
 import math
 import threading
+import logging
 from rich.panel import Panel
 from rich.text import Text
 from rich.align import Align
@@ -54,13 +55,25 @@ class UIState:
 def setup_cli_ui():
     """Monkey-patches the LiveKit Agents CLI to provide a pixelated avatar UI."""
 
-    # 1. Hide logs when ui_mode is on
+    # 1. Suppress ALL log output when sphere is showing.
+    #    We do this by detaching the RichLoggingHandler from the root logger
+    #    and re-attaching it when logs are toggled on. This is cleaner than
+    #    patching emit() because it prevents ANY console output from the
+    #    handler and its sub-calls (traceback printing, extra lines, etc.)
     _original_emit = lk_cli.RichLoggingHandler.emit
     def _custom_emit(self, record):
         if UIState.ui_mode:
-            return
+            return  # Drop ALL log records when sphere is visible
         _original_emit(self, record)
     lk_cli.RichLoggingHandler.emit = _custom_emit
+
+    # Also suppress the _print_plain_traceback method which bypasses emit()
+    _original_print_tb = lk_cli.RichLoggingHandler._print_plain_traceback
+    def _custom_print_tb(self, record):
+        if UIState.ui_mode:
+            return
+        _original_print_tb(self, record)
+    lk_cli.RichLoggingHandler._print_plain_traceback = _custom_print_tb
 
     # 2. Patch the audio visualizer to draw our cool pixel avatar
     def _custom_rich(self):
@@ -228,6 +241,7 @@ def setup_cli_ui():
                 elif isinstance(ch, str) and ch.lower() == "l":
                     UIState.ui_mode = not UIState.ui_mode
                     if UIState.ui_mode:
+                        # Clear all log output from the screen
                         print("\033c", end="", flush=True)
 
         listener = threading.Thread(target=_listen_for_keys, daemon=True)
