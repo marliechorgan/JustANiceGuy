@@ -16,6 +16,8 @@ class UIState:
     last_user = ""
     last_agent = ""
     start_time = None
+    llm_status = ""  # e.g. "thinking...", "503 Server Error", "429 Rate Limited"
+    llm_error_count = 0
 
 def setup_cli_ui():
     """Monkey-patches the LiveKit Agents CLI to provide a pixelated avatar UI."""
@@ -111,6 +113,13 @@ def setup_cli_ui():
                     row.append(" ")
             lines.append("".join(row))
             
+        lines.append("")
+        # Status line
+        if UIState.llm_status:
+            if UIState.llm_error_count > 0:
+                lines.append(f"[bold reverse] {UIState.llm_status} [/bold reverse]")
+            else:
+                lines.append(f"[dim]{UIState.llm_status}[/dim]")
         lines.append("")
         if UIState.last_user:
             lines.append(f"[dim]You:[/dim] {UIState.last_user}")

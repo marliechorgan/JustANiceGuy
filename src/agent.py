@@ -457,6 +457,8 @@ async def entrypoint(ctx: JobContext):
             tools.current_turn_mode = "CONV"
 
             logger.info("Generating LLM response...")
+            UIState.llm_status = "Thinking..."
+            UIState.llm_error_count = 0
 
             speech_text = ""
             tool_calls = []
@@ -507,10 +509,36 @@ async def entrypoint(ctx: JobContext):
                     # Signal TTS stream end
                     await text_queue.put(None)
                     llm_error = False
+                    UIState.llm_status = ""
+                    UIState.llm_error_count = 0
                     break  # Success — exit retry loop
 
                 except Exception as e:
                     llm_error = True
+                    UIState.llm_error_count += 1
+                    
+                    # Extract HTTP status code if available
+                    _status = ""
+                    _err_str = str(e)
+                    if hasattr(e, 'status_code') and e.status_code:
+                        sc = e.status_code
+                        if sc == 429:
+                            _status = f"429 Rate Limited (attempt {attempt+1}/3)"
+                        elif sc == 503:
+                            _status = f"503 Service Unavailable (attempt {attempt+1}/3)"
+                        elif sc == 504:
+                            _status = f"504 Gateway Timeout (attempt {attempt+1}/3)"
+                        else:
+                            _status = f"{sc} Error (attempt {attempt+1}/3)"
+                    elif "server error" in _err_str.lower():
+                        _status = f"Server Error (attempt {attempt+1}/3)"
+                    elif "rate" in _err_str.lower() or "429" in _err_str:
+                        _status = f"Rate Limited (attempt {attempt+1}/3)"
+                    else:
+                        _status = f"LLM Error (attempt {attempt+1}/3)"
+                    
+                    UIState.llm_status = _status
+                    logger.warning("LLM error [%s] (attempt %d/3): %s", _status, attempt + 1, e)
                     # Make sure the text stream is closed and SILENCED
                     try:
                         await text_queue.put(None)
@@ -525,12 +553,12 @@ async def entrypoint(ctx: JobContext):
                             logger.warning("Failed to interrupt speech handle on error: %s", e_int)
                             
                     if attempt < 2:
-                        logger.warning("LLM error (attempt %d/3), retrying: %s", attempt + 1, e)
                         await asyncio.sleep(0.5 * (attempt + 1))
                         speech_text = ""
                         tool_calls = []
                     else:
                         logger.error("LLM failed after 3 attempts: %s", e)
+                        UIState.llm_status = f"FAILED: {_status}"
 
             if llm_error:
                 UIState.tts_playing = False  # Ensure STT gate is reset
@@ -540,6 +568,10 @@ async def entrypoint(ctx: JobContext):
                                add_to_chat_ctx=False)
                 except RuntimeError:
                     logger.warning("Session closing, cannot speak error message")
+                # Clear error status after speaking
+                await asyncio.sleep(3)
+                UIState.llm_status = ""
+                UIState.llm_error_count = 0
                 break  # Break CONTINUE loop, wait for next trigger
 
             if interrupted:
