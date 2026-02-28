@@ -283,7 +283,9 @@ async def wait_for_either(user_speech_task, queue_update_task):
 async def entrypoint(ctx: JobContext):
     """Just a Nice Guy — Custom Pipeline Entrypoint."""
 
-    logger.info("Connecting to room: %s", ctx.room.name)
+    _gemini_model = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+    _tts_model = os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5")
+    logger.info("Connecting to room: %s | LLM=%s | TTS=%s", ctx.room.name, _gemini_model, _tts_model)
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
     queue = VoiceLLMQueue()
@@ -311,14 +313,14 @@ async def entrypoint(ctx: JobContext):
     vad_model = ctx.proc.userdata["vad"]
     stt_model = deepgram.STT(api_key=os.environ["DEEPGRAM_API_KEY"])
     llm_model = google.LLM(
-        model=os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"),
+        model=_gemini_model,
         api_key=os.environ["GEMINI_API_KEY"],
         thinking_config=genai_types.ThinkingConfig(thinking_level="LOW"),
         tool_choice="auto",
     )
     tts_model = elevenlabs.TTS(
         api_key=os.environ["ELEVENLABS_API_KEY"],
-        model=os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5"),
+        model=_tts_model,
         voice_id=os.environ.get("ELEVENLABS_VOICE_ID", "lUTamkMw7gOzZbFIwmq4"),
         voice_settings=elevenlabs.VoiceSettings(
             speed=float(os.environ.get("ELEVENLABS_SPEED", "1.14")),
@@ -476,6 +478,8 @@ async def entrypoint(ctx: JobContext):
             # Reset turn mode
             tools.current_turn_mode = "CONV"
 
+            import time as _time
+            _turn_start = _time.monotonic()
             logger.info("Generating LLM response...")
             UIState.llm_status = "Thinking..."
             UIState.llm_error_count = 0
@@ -487,8 +491,13 @@ async def entrypoint(ctx: JobContext):
 
             # Retry up to 2 times for transient Gemini 500 errors
             for attempt in range(3):
+                # Bail out if session ended during retry backoff
+                if session_ended["status"]:
+                    logger.info("Session ended — aborting LLM retry loop")
+                    llm_error = False  # Don't trigger error speech
+                    break
+
                 try:
-                    import time as _time
                     _llm_start = _time.monotonic()
                     response = llm_model.chat(
                         chat_ctx=chat_ctx,
@@ -534,6 +543,9 @@ async def entrypoint(ctx: JobContext):
 
                     # Signal TTS stream end
                     await text_queue.put(None)
+                    _llm_done = _time.monotonic()
+                    _llm_stream_ms = (_llm_done - _llm_start) * 1000
+                    logger.info("LLM stream complete: %.0fms total (TTFB + streaming)", _llm_stream_ms)
                     llm_error = False
                     UIState.llm_status = ""
                     UIState.llm_error_count = 0
@@ -582,6 +594,10 @@ async def entrypoint(ctx: JobContext):
                             logger.warning("Failed to interrupt speech handle on error: %s", e_int)
                             
                     if attempt < 2:
+                        if session_ended["status"]:
+                            logger.info("Session ended — aborting LLM retry")
+                            llm_error = False
+                            break
                         backoff = 2.0 * (attempt + 1)  # 2s, then 4s
                         logger.info("Retrying in %.1fs...", backoff)
                         await asyncio.sleep(backoff)
@@ -707,7 +723,10 @@ async def entrypoint(ctx: JobContext):
                 UIState.tts_status = "Speaking..."
                 try:
                     await speech_handle
-                    logger.info("TTS playout complete.")
+                    _tts_done = _time.monotonic()
+                    _tts_ms = (_tts_done - (_llm_done if '_llm_done' in dir() else _turn_start)) * 1000
+                    _total_ms = (_tts_done - _turn_start) * 1000
+                    logger.info("TTS playout complete (%.0fms). Turn total: %.0fms", _tts_ms, _total_ms)
                     UIState.tts_status = ""
                 except Exception as e:
                     logger.warning("TTS playout error: %s", e)
