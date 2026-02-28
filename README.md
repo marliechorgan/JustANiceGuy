@@ -74,9 +74,13 @@ python src/agent.py download-files
 cp .env.example .env
 # Edit .env and fill in your API keys
 
-# 7. Run in dev mode
-python src/agent.py dev
+# 7. Start JARVIS
+./start.sh
 ```
+
+**Controls inside JARVIS:**
+- Press `m` to toggle microphone mute.
+- Press `l` to toggle the animated **CLI UI / Logs**.
 
 > **Don't have OpenClaw?** Set `USE_OPENCLAW_STUB=true` in your `.env` to use
 > a built-in demo that simulates agent responses with Gemini.
