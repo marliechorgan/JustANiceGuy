@@ -12,9 +12,10 @@ from livekit.agents.cli.readchar import key, readkey
 class UIState:
     tts_playing = False
     stt_muted = False
-    ui_mode = False
+    ui_mode = True # No logs by default
     last_user = ""
     last_agent = ""
+    start_time = None
 
 def setup_cli_ui():
     """Monkey-patches the LiveKit Agents CLI to provide a pixelated avatar UI."""
@@ -50,6 +51,12 @@ def setup_cli_ui():
             R += math.sin(t * 3.0) * 0.04
         elif not muted:
             R += (vol / 150.0)
+
+        # Scale R smoothly over 2 seconds if just started
+        if UIState.start_time is not None:
+            elapsed = time.time() - UIState.start_time
+            if elapsed < 2.0:
+                R *= 1.0 - (1.0 - (elapsed / 2.0)) ** 4
 
         # Reactive rotation speeds
         rot_y = t * 1.5 if is_speaking else t * 0.4
@@ -162,9 +169,17 @@ def setup_cli_ui():
                     c.set_microphone_enabled(not UIState.stt_muted)
                 elif isinstance(ch, str) and ch.lower() == "l":
                     UIState.ui_mode = not UIState.ui_mode
+                    if UIState.ui_mode:
+                        # Clear logs completely off the screen!
+                        print("\033c", end="", flush=True)
 
         listener = threading.Thread(target=_listen_for_keys, daemon=True)
         listener.start()
+
+        if UIState.start_time is None:
+            UIState.start_time = time.time()
+            if UIState.ui_mode:
+                print("\033c", end="", flush=True)
 
         # Check initial mute state
         c.set_microphone_enabled(not UIState.stt_muted, device=input_device)
