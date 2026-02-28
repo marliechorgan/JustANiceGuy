@@ -7,7 +7,7 @@ from rich.align import Align
 from rich.live import Live
 
 import livekit.agents.cli.cli as lk_cli
-from prompt_toolkit.keys import Keys as pt_key
+from livekit.agents.cli.readchar import key, readkey
 
 class UIState:
     tts_playing = False
@@ -91,13 +91,13 @@ def setup_cli_ui():
 
         def _listen_for_keys():
             while not ctrl_t_e.is_set():
-                ch = lk_cli.readkey()
-                if ch == pt_key.CTRL_T:
+                ch = readkey()
+                if ch == key.CTRL_T:
                     ctrl_t_e.set()
                     break
                 elif ch == "?" and visualizer is not None:
                     visualizer.show_shortcuts = not visualizer.show_shortcuts
-                elif ch == pt_key.ESC and visualizer is not None:
+                elif ch == key.ESC and visualizer is not None:
                     visualizer.show_shortcuts = False
                 elif isinstance(ch, str) and ch.lower() == "m":
                     UIState.stt_muted = not UIState.stt_muted
