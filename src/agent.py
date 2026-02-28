@@ -449,7 +449,7 @@ async def entrypoint(ctx: JobContext):
                 queue.flush_to_chat_ctx(chat_ctx)
 
             # Bail out if session ended during flush or between iterations
-            if state["session_ended"]:
+            if session_ended["status"]:
                 logger.info("Session ended — aborting LLM generation")
                 break
 
