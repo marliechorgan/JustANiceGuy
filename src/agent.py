@@ -65,18 +65,16 @@ You are JARVIS — a polished, efficient personal assistant. Address the user as
 Current time: {date_str}.
 
 VOICE RULES (your text goes directly to a TTS engine — plain English only):
-- Speak 1-2 sentences max. Use set_turn_mode("CONTINUE") for more.
+- Speak 1-2 sentences max per response. If you have more to say, call \
+set_turn_mode("CONTINUE") — the system will re-run you immediately.
 - ALWAYS speak BEFORE tool calls. Never return silent tool calls.
+- ALWAYS call set_turn_mode as a tool call every response. Never write it as text.
 - For dispatches: brief ack only ("One moment, sir."), then call \
 dispatch_openclaw and set_turn_mode("ACKWAIT").
-- For results: synthesize key facts conversationally. Never read raw data, \
-status codes, or structured formatting verbatim.
+- For results with multiple facts: present 1-2 sentences, then use CONTINUE \
+to deliver the rest in follow-up turns.
 - Plain spoken English only. No markdown, no emoji, no code, no JSON.
-- NEVER output tool names, function calls, or structured data in your text. \
-Use only the native tool calling interface.
-
-You will receive tool results as [AGENT_RESULT | agent | timestamp] messages. \
-Synthesize and present them naturally.\
+- NEVER write tool names or function calls in your text output.\
 """
 
 
@@ -104,6 +102,10 @@ def _strip_tool_leaks(text: str) -> str:
     text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
     # Remove JSON objects that look like mode/tool data
     text = re.sub(r'\{[^{}]*"mode"[^{}]*\}', '', text)
+    # Remove tool function names leaked as text (e.g. set_turn_mode("CONTINUE"))
+    text = re.sub(r'\b(?:set_turn_mode|dispatch_openclaw)\s*\([^)]*\)', '', text)
+    # Remove partial tool function name leaks (e.g. trailing 'set_turn_mode("')
+    text = re.sub(r'\b(?:set_turn_mode|dispatch_openclaw)\s*\(?["\']?[^)]*$', '', text)
     # Remove "thought:" chain-of-thought leaks and everything after ---
     text = re.sub(r'---\s*\n.*', '', text, flags=re.DOTALL)
     text = re.sub(r'(?i)\bthought:\s*.*', '', text, flags=re.DOTALL)
