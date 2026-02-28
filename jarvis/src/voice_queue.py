@@ -10,6 +10,7 @@ Per the architecture doc (Option A — Hold and batch):
 """
 
 from __future__ import annotations
+import re
 
 import asyncio
 from dataclasses import dataclass, field
@@ -42,28 +43,37 @@ class VoiceLLMQueue:
             self._result_event.set()
 
     def flush_to_chat_ctx(self, chat_ctx) -> None:
-        """Drain the queue and append items to the ChatContext.
+        """Drain the queue and append agent_result items to the ChatContext.
         
+        Only agent_result items are flushed — status_update items are noise
+        (e.g. "Dispatching to OpenClaw...") that waste LLM tokens.
         Items are added as 'user' role so the LLM treats them as input
         requiring a response (system messages may be deprioritized).
         """
         import logging
         _logger = logging.getLogger("niceguy")
 
+        results = [item for item in self.items if item.type == "agent_result"]
+        status_count = len(self.items) - len(results)
+
         parts = []
-        for item in self.items:
+        for item in results:
+            cleaned_summary = _clean_for_voice(item.summary)
             parts.append(
-                f"[{item.type.upper()} | {item.agent} | "
-                f"{item.timestamp.isoformat()}]\n{item.summary}"
+                f"[AGENT_RESULT | {item.agent} | "
+                f"{item.timestamp.isoformat()}]\n{cleaned_summary}"
             )
         
         if parts:
             combined = "\n\n".join(parts)
-            _logger.info("Flushing %d queue items to chat_ctx:\n%s", len(self.items), combined[:300])
+            _logger.info("Flushing %d results to chat_ctx (dropped %d status updates):\n%s",
+                        len(results), status_count, combined[:300])
             chat_ctx.add_message(
                 role="user",
                 content=f"[SYSTEM — Sub-agent results below. Present these to the user naturally.]\n\n{combined}",
             )
+        elif status_count:
+            _logger.debug("Dropped %d status-only queue items (no results to flush)", status_count)
         
         self.items.clear()
         self._result_event.clear()
@@ -78,3 +88,34 @@ class VoiceLLMQueue:
     async def wait_for_result(self) -> None:
         """Block until an agent_result arrives. Status updates accumulate silently."""
         await self._result_event.wait()
+
+
+def _clean_for_voice(text: str) -> str:
+    """Strip markdown and machine-readable formatting from agent results.
+    
+    Cleans the text BEFORE it enters chat_ctx so the LLM receives
+    natural prose instead of structured data it might parrot.
+    """
+    # Strip markdown bold/italic
+    text = text.replace('**', '').replace('__', '')
+    # Strip bullet points and list markers
+    text = re.sub(r'^\s*[-*•]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+    # Strip markdown headers
+    text = re.sub(r'^\s*#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Strip STATUS: SUCCESS/ERROR prefixes
+    text = re.sub(r'STATUS:\s*(SUCCESS|ERROR|FAILURE)[.:]?\s*', '', text, flags=re.IGNORECASE)
+    # Strip "Action:" prefix
+    text = re.sub(r'^Action:\s*', '', text, flags=re.IGNORECASE | re.MULTILINE)
+    # Strip inline code backticks
+    text = re.sub(r'`([^`]*)`', r'\1', text)
+    # Strip emoji
+    text = re.sub(
+        r'[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0000FE00-\U0000FE0F'
+        r'\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002702-\U000027B0'
+        r'\U0000200D\U0000FE0F]+', '', text
+    )
+    # Collapse excess whitespace
+    text = re.sub(r'  +', ' ', text)
+    text = re.sub(r'\n\s*\n', '\n', text)
+    return text.strip()

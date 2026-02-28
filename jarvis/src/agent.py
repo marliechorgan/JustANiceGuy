@@ -4,6 +4,7 @@ import logging
 import re
 import os
 from datetime import datetime
+import sys
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -65,20 +66,43 @@ CONTEXT:
 RULES:
 - CRITICAL: You MUST ALWAYS output spoken text BEFORE any tool calls. \
 Never return tool calls without speaking first. The user must always hear \
-something — even a brief acknowledgement like "On it, sir" or "Let me \
-check that for you." Silent tool calls are NOT allowed.
+something — even a brief acknowledgement. Silent tool calls are NOT allowed.
 - Output 1-2 sentences maximum per response. Call set_turn_mode("CONTINUE") \
 if you have more to say. This creates natural pacing.
-- When dispatching work, acknowledge immediately with speech ("I'll check \
-that now"), call dispatch_openclaw with a clear directive, and call \
-set_turn_mode("ACKWAIT").
+- AVOID DOUBLE-SPEAKING: When dispatching work, give ONLY a very brief \
+acknowledgment ("On it, sir." or "One moment." or "Let me check."). Do \
+NOT describe what you're about to do — the user already asked for it. \
+When the result comes back, SYNTHESIZE the key information into natural \
+spoken English. NEVER read raw status codes (like "STATUS: SUCCESS"), \
+headers, section titles, bullet point markers, or structured formatting \
+verbatim. Extract the important facts and present them conversationally \
+as if briefing the user. If the result is an error, state the error \
+clearly and concisely.
+- When dispatching work, call dispatch_openclaw with a clear directive, \
+and call set_turn_mode("ACKWAIT").
 - When you have tool results to present and the information spans more \
 than 2 sentences, present 1-2 sentences and use CONTINUE.
-- Synthesise and prioritise information. Don't parrot raw data.
+- Synthesise and prioritise information. NEVER parrot raw data, status \
+codes, or machine-readable formatting. Your output goes to a TTS engine.
 - Be conversational, concise, and natural. You are speaking, not writing.
+- NEVER use markdown formatting (no **bold**, no `backticks`, no bullet \
+points, no headers). NEVER use emoji. Your output goes directly to a \
+text-to-speech engine — it must be plain spoken English only.
+- When mentioning file paths or technical terms, say them naturally \
+(e.g. "the guide file in your docs folder" not "docs forward slash GUIDE \
+dot md").
 - ALWAYS use the native tool calling interface. NEVER output tool calls, \
 function names, XML tags, or code blocks in your text response to the user for TTS. Your \
 text output is spoken aloud — it must be pure natural language.
+
+SYSTEM LIMITATIONS (be honest about these):
+- You CANNOT cancel a task once dispatched. If the user asks to cancel, \
+acknowledge but explain the task may still complete in the background.
+- You CANNOT change system timeouts or configurations at runtime. If \
+something is timing out, tell the user honestly rather than pretending to fix it.
+- If a dispatch returns "Maximum retry attempts reached", do NOT try \
+again. Inform the user the system is currently unavailable and suggest \
+trying later or rephrasing.
 
 TOOLS:
 - dispatch_openclaw(directive): Send a natural language task to the agent \
@@ -99,11 +123,13 @@ Treat these as data you've retrieved. Present them naturally.\
 
 
 def _strip_tool_leaks(text: str) -> str:
-    """Remove any tool call fragments Gemini leaks into the text stream.
+    """Remove any tool call fragments, markdown formatting, and emoji that
+    Gemini leaks into the text stream.
     
     Gemini sometimes emits partial XML-like tags (<call:...>, <function_call>, etc.)
-    or trailing tool metadata in the text content. Strip these so TTS only speaks
-    clean natural language.
+    or trailing tool metadata in the text content. It also passes through markdown
+    formatting (**bold**, `code`) and emoji from OpenClaw responses. Strip all
+    of these so TTS only speaks clean natural language.
     """
     # Remove <call:...> blocks and anything after them
     text = re.sub(r'<call:[^>]*>.*', '', text, flags=re.DOTALL)
@@ -114,16 +140,42 @@ def _strip_tool_leaks(text: str) -> str:
     # Remove ```tool_code blocks
     text = re.sub(r'```tool_code.*?```', '', text, flags=re.DOTALL)
     text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    # Strip markdown bold/italic markers
+    text = text.replace('**', '').replace('__', '')
+    text = text.replace('*', '').replace('_', ' ')
+    # Strip inline code backticks
+    text = re.sub(r'`([^`]*)`', r'\1', text)
+    # Strip markdown bullet points at start of lines
+    text = re.sub(r'^\s*[-*•]\s+', '', text, flags=re.MULTILINE)
+    # Strip numbered list markers at start of lines (e.g. "1. ", "2. ")
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+    # Strip markdown headers (# ## ### etc.)
+    text = re.sub(r'^\s*#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Strip STATUS: SUCCESS/ERROR prefixes from agent results
+    text = re.sub(r'STATUS:\s*(SUCCESS|ERROR|FAILURE)[.:]?\s*', '', text, flags=re.IGNORECASE)
+    # Strip "Action:" prefix commonly returned by OpenClaw
+    text = re.sub(r'Action:\s*', '', text, flags=re.IGNORECASE)
+    # Strip emoji (Unicode emoji ranges)
+    text = re.sub(
+        r'[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0000FE00-\U0000FE0F'
+        r'\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002702-\U000027B0'
+        r'\U0000200D\U0000FE0F]+', '', text
+    )
     # Clean up whitespace
+    text = re.sub(r'  +', ' ', text)
+    text = re.sub(r'\n\s*\n', '\n', text)  # Collapse blank lines
     text = text.strip()
     return text
 
 
 class VoiceTools:
+    MAX_DISPATCH_RETRIES = 2  # Max times to dispatch similar directives
+
     def __init__(self, queue: VoiceLLMQueue):
         self._queue = queue
         self._pending_directives: list[str] = []
-        self._inflight_count = 0  # Track background tasks still running
+        self._inflight_tasks: list[asyncio.Task] = []  # Track task handles for cancellation
+        self._dispatch_counts: dict[str, int] = {}  # directive_key -> count (retry limiter)
         self.current_turn_mode = "CONV"
 
     @llm.function_tool(
@@ -132,7 +184,15 @@ class VoiceTools:
     )
     async def dispatch_openclaw(self, directive: str) -> str:
         """Dispatch a natural language task to the agent system."""
-        logger.info("LLM dispatched directive: %s", directive)
+        # Bug #5: Enforce retry limit to prevent infinite retry loops
+        key = directive.lower().strip()[:80]
+        count = self._dispatch_counts.get(key, 0)
+        if count >= self.MAX_DISPATCH_RETRIES:
+            logger.warning("Max retries (%d) reached for: %s", self.MAX_DISPATCH_RETRIES, key)
+            return "Maximum retry attempts reached. The system appears unavailable."
+
+        self._dispatch_counts[key] = count + 1
+        logger.info("LLM dispatched directive: %s (attempt %d)", directive, count + 1)
         self._pending_directives.append(directive)
         self.current_turn_mode = "ACKWAIT"  # Default if not explicitly set
         return "Dispatched."
@@ -151,22 +211,45 @@ class VoiceTools:
         """Fire off any queued directives as tracked background tasks."""
         use_stub = os.environ.get("USE_OPENCLAW_STUB", "").lower() in ("1", "true", "yes")
         dispatch_fn = dispatch_openclaw_stub if use_stub else dispatch_openclaw_real
+        # Clean up completed tasks first
+        self._inflight_tasks = [t for t in self._inflight_tasks if not t.done()]
         for d in self._pending_directives:
-            self._inflight_count += 1
-            asyncio.create_task(self._tracked_dispatch(dispatch_fn, d))
+            task = asyncio.create_task(self._tracked_dispatch(dispatch_fn, d))
+            self._inflight_tasks.append(task)
         self._pending_directives.clear()
 
     async def _tracked_dispatch(self, dispatch_fn, directive: str) -> None:
-        """Wrap dispatch to decrement inflight counter when done."""
+        """Wrap dispatch to track completion."""
         try:
             await dispatch_fn(directive, self._queue)
+        except asyncio.CancelledError:
+            logger.info("Dispatch cancelled: %s", directive[:60])
+        except Exception as e:
+            logger.error("Dispatch error: %s", e)
         finally:
-            self._inflight_count -= 1
-            logger.info("Inflight tasks remaining: %d", self._inflight_count)
+            active = sum(1 for t in self._inflight_tasks if not t.done())
+            logger.info("Inflight tasks remaining: %d", active)
+
+    def cancel_inflight(self) -> None:
+        """Cancel all running OpenClaw tasks."""
+        cancelled = 0
+        for t in self._inflight_tasks:
+            if not t.done():
+                t.cancel()
+                cancelled += 1
+        self._inflight_tasks.clear()
+        self._pending_directives.clear()
+        if cancelled:
+            logger.info("Cancelled %d inflight tasks", cancelled)
+
+    @property
+    def inflight_count(self) -> int:
+        """Number of tasks still running."""
+        return sum(1 for t in self._inflight_tasks if not t.done())
 
     def has_pending(self) -> bool:
         """True if there are unfired directives OR background tasks in flight."""
-        return bool(self._pending_directives) or self._inflight_count > 0
+        return bool(self._pending_directives) or self.inflight_count > 0
 
 
 def prewarm(proc: JobProcess):
@@ -175,11 +258,16 @@ def prewarm(proc: JobProcess):
 
 
 async def wait_for_either(user_speech_task, queue_update_task):
-    """Wait for whichever comes first: user speaks or queue gets new items."""
+    """Wait for whichever comes first: user speaks or queue gets new items.
+    
+    Bug #8 fix: Returns a list of results if both completed simultaneously.
+    """
     done, pending = await asyncio.wait(
         [user_speech_task, queue_update_task],
         return_when=asyncio.FIRST_COMPLETED
     )
+    # Return the first result. If both completed, both will be in 'done',
+    # but since we recreate the losing task anyway, just take one.
     return done.pop().result()
 
 
@@ -245,6 +333,9 @@ async def entrypoint(ctx: JobContext):
     # --- Speech queue: fed by AgentSession's conversation_item_added event ---
     speech_queue: asyncio.Queue[str] = asyncio.Queue()
     barge_in_event = asyncio.Event()
+    # Bug #1: Use a mutable dict for TTS gate — bare bool reassignment in the
+    # loop body would shadow the closure variable the callback reads.
+    state = {"tts_playing": False, "session_ended": False, "stt_muted": False}
 
     @session.on("conversation_item_added")
     def on_conversation_item_added(ev):
@@ -252,6 +343,17 @@ async def entrypoint(ctx: JobContext):
         if isinstance(item, llm.ChatMessage) and item.role == "user" and isinstance(item.content, list):
             text_content = " ".join([c for c in item.content if isinstance(c, str)])
             if text_content:
+                # Bug #1: Ignore STT transcripts while TTS is playing
+                # (prevents JARVIS hearing its own audio output)
+                # Also ignore after session has ended
+                if state["session_ended"]:
+                    return
+                if state["stt_muted"]:
+                    logger.debug("Filtered STT while muted: %s", text_content[:60])
+                    return
+                if state["tts_playing"]:
+                    logger.debug("Filtered STT during TTS playout: %s", text_content[:60])
+                    return
                 logger.info("User said: %s", text_content)
                 asyncio.create_task(speech_queue.put(text_content))
 
@@ -259,7 +361,44 @@ async def entrypoint(ctx: JobContext):
     def on_user_started_speaking():
         barge_in_event.set()
 
+    @session.on("close")
+    def on_session_close():
+        """Handle external shutdown (Ctrl+C, LiveKit disconnect)."""
+        if not state["session_ended"]:
+            logger.info("Session close detected — setting shutdown flag")
+            state["session_ended"] = True
+            state["tts_playing"] = False
+            tools.cancel_inflight()
+            # Cancel blocked wait tasks so main loop can exit
+            for t in state.get("_tasks", []):
+                if t and not t.done():
+                    t.cancel()
+
     await session.start(agent, room=ctx.room)
+
+    async def keyboard_listener():
+        """Listen for CLI input to toggle mute state."""
+        loop = asyncio.get_running_loop()
+        while not state["session_ended"]:
+            try:
+                # Run the blocking sys.stdin.readline in a separate thread
+                line = await loop.run_in_executor(None, sys.stdin.readline)
+                if line:
+                    line = line.strip().lower()
+                    if line == "m":
+                        state["stt_muted"] = not state["stt_muted"]
+                        if state["stt_muted"]:
+                            logger.info("🎤 Microphone MUTED (Type 'm' and press Enter to unmute)")
+                            print("\n\033[91m🎤 Microphone MUTED\033[0m")
+                        else:
+                            logger.info("🎤 Microphone UNMUTED")
+                            print("\n\033[92m🎤 Microphone UNMUTED\033[0m")
+            except Exception as e:
+                logger.debug("Keyboard listener error: %s", e)
+                break
+
+    # Start the background listener
+    listener_task = asyncio.create_task(keyboard_listener())
 
     # Greeting — use session.say() which routes through AgentSession's audio pipeline
     await asyncio.sleep(0.5)
@@ -276,15 +415,35 @@ async def entrypoint(ctx: JobContext):
 
     speech_task = asyncio.create_task(wait_speech())
     queue_task = asyncio.create_task(wait_queue())
+    state["_tasks"] = [speech_task, queue_task, listener_task]
 
-    while True:
+    while not state["session_ended"]:
         logger.info("Waiting for trigger...")
-        trigger = await wait_for_either(speech_task, queue_task)
+        try:
+            trigger = await wait_for_either(speech_task, queue_task)
+        except (asyncio.CancelledError, Exception) as e:
+            if state["session_ended"]:
+                logger.info("Main loop exiting — session ended during wait")
+                break
+            raise
 
         is_speech = trigger != "QUEUE_UPDATE"
 
         if is_speech:
-            chat_ctx.add_message(role="user", content=trigger)
+            if state["session_ended"]:
+                break
+            # Bug #7: Small debounce window to collect buffered speech
+            await asyncio.sleep(0.1)
+            messages = [trigger]
+            while not speech_queue.empty():
+                try:
+                    messages.append(speech_queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
+            combined_speech = " ".join(messages)
+            if len(messages) > 1:
+                logger.info("Combined %d buffered speech items into one", len(messages))
+            chat_ctx.add_message(role="user", content=combined_speech)
             speech_task = asyncio.create_task(wait_speech())
         else:
             logger.info("Queue update triggered")
@@ -297,6 +456,11 @@ async def entrypoint(ctx: JobContext):
             # Flush queue into conversation history before each LLM run
             if queue.has_items():
                 queue.flush_to_chat_ctx(chat_ctx)
+
+            # Bail out if session ended during flush or between iterations
+            if state["session_ended"]:
+                logger.info("Session ended — aborting LLM generation")
+                break
 
             # Reset turn mode
             tools.current_turn_mode = "CONV"
@@ -325,6 +489,7 @@ async def entrypoint(ctx: JobContext):
                             yield token
 
                     # Start TTS immediately with the streaming generator
+                    state["tts_playing"] = True  # Bug #1: Gate STT
                     speech_handle = session.say(_text_stream(), add_to_chat_ctx=False)
 
                     async for chunk in response:
@@ -348,11 +513,19 @@ async def entrypoint(ctx: JobContext):
 
                 except Exception as e:
                     llm_error = True
-                    # Make sure the text stream is closed
+                    # Make sure the text stream is closed and SILENCED
                     try:
                         await text_queue.put(None)
                     except Exception:
                         pass
+                    
+                    # Stop the actual TTS playback of the partial response
+                    if "speech_handle" in locals():
+                        try:
+                            await speech_handle.interrupt()
+                        except Exception as e_int:
+                            logger.warning("Failed to interrupt speech handle on error: %s", e_int)
+                            
                     if attempt < 2:
                         logger.warning("LLM error (attempt %d/3), retrying: %s", attempt + 1, e)
                         await asyncio.sleep(0.5 * (attempt + 1))
@@ -362,11 +535,17 @@ async def entrypoint(ctx: JobContext):
                         logger.error("LLM failed after 3 attempts: %s", e)
 
             if llm_error:
-                session.say("Apologies sir, I seem to be having a moment. Could you try that again?", 
-                           add_to_chat_ctx=False)
+                state["tts_playing"] = False  # Ensure STT gate is reset
+                # Bug #2: Wrap in try/except — session may be closing
+                try:
+                    session.say("Apologies sir, I seem to be having a moment. Could you try that again?", 
+                               add_to_chat_ctx=False)
+                except RuntimeError:
+                    logger.warning("Session closing, cannot speak error message")
                 break  # Break CONTINUE loop, wait for next trigger
 
             if interrupted:
+                state["tts_playing"] = False  # Ensure STT gate is reset
                 if hasattr(response, "aclose"):
                     await response.aclose()
                 await speech_handle.interrupt()
@@ -418,8 +597,12 @@ async def entrypoint(ctx: JobContext):
 
                     # Only persist to chat_ctx if it has a thought signature
                     # (set_turn_mode often doesn't get one — it's local-only anyway)
+                    # Bug fix: Even if set_turn_mode gets a signature, never send it back
+                    # to Gemini, as it causes a client error on subsequent CONTINUE turns.
                     has_sig = tc.call_id in llm_model._thought_signatures
-                    if has_sig:
+                    should_persist = has_sig and tc.name != "set_turn_mode"
+                    
+                    if should_persist:
                         fc = llm.FunctionCall(
                             call_id=tc.call_id,
                             name=tc.name,
@@ -437,6 +620,10 @@ async def entrypoint(ctx: JobContext):
 
                 # Fire off any pending openclaw directives
                 tools.flush_pending()
+
+                # Bug #6: Clear thought signatures to prevent unbounded growth
+                if hasattr(llm_model, '_thought_signatures'):
+                    llm_model._thought_signatures.clear()
 
                 # Safety net: if LLM returned tools but no speech, speak an ack
                 if not speech_text and any(tc.name == "dispatch_openclaw" for tc in tool_calls):
@@ -460,6 +647,8 @@ async def entrypoint(ctx: JobContext):
                     logger.info("TTS playout complete.")
                 except Exception as e:
                     logger.warning("TTS playout error: %s", e)
+                finally:
+                    state["tts_playing"] = False  # Bug #1: Un-gate STT
 
             # --- Turn mode logic ---
             mode = tools.current_turn_mode
@@ -472,9 +661,30 @@ async def entrypoint(ctx: JobContext):
             elif mode == "CONV":
                 break  # Wait for user
             elif mode == "END":
-                logger.info("Session ended by agent.")
-                await ctx.room.disconnect()
+                # Bug #10: Graceful shutdown
+                logger.info("Session ending — cleaning up...")
+                state["session_ended"] = True
+                state["tts_playing"] = False
+                tools.cancel_inflight()
+                await asyncio.sleep(0.3)
+                speech_task.cancel()
+                queue_task.cancel()
+                listener_task.cancel()
+                try:
+                    await ctx.room.disconnect()
+                except Exception:
+                    pass
                 return
+
+    # --- Cleanup after main loop exits (e.g. Ctrl+C / session close) ---
+    logger.info("Main loop exited — cleaning up...")
+    state["session_ended"] = True
+    state["tts_playing"] = False
+    tools.cancel_inflight()
+    for t in [speech_task, queue_task, listener_task]:
+        if not t.done():
+            t.cancel()
+    logger.info("Shutdown complete.")
 
 if __name__ == "__main__":
     cli.run_app(

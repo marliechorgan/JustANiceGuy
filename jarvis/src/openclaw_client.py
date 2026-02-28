@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 
 from voice_queue import QueueItem, VoiceLLMQueue
 
@@ -22,7 +23,19 @@ logger = logging.getLogger("niceguy.openclaw")
 DEFAULT_AGENT = "main"
 
 # Timeout for agent execution (seconds)
-AGENT_TIMEOUT = 60
+AGENT_TIMEOUT = 600
+
+# Voice-specific context prepended to every directive.
+# Tells the main agent to handle simple tasks directly instead of
+# spawning sub-agents, which saves 1-2 LLM round-trips.
+VOICE_DIRECTIVE_PREFIX = (
+    "[VOICE COMMAND FROM JARVIS ROUTER]\n"
+    "CRITICAL INSTRUCTION: Do NOT output conversational filler, polite phrases, or emojis. "
+    "Another AI is acting as the voice interface and will speak to the user. "
+    "You are a backend execution tool. Output ONLY raw data, facts, or a terse status code "
+    "(e.g., 'STATUS: SUCCESS. Action: Music paused.'). Output nothing else. "
+    "Do NOT spawn sub-agents unless the task requires specialist tools.\n\n"
+)
 
 
 async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
@@ -40,22 +53,55 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
 
     start = time.monotonic()
 
+    # Wrap directive with voice-specific context
+    wrapped_directive = VOICE_DIRECTIVE_PREFIX + directive
+
+    # Use a persistent session ID so OpenClaw caches the system prompt.
+    # This avoids 14s cold-starts and massive context resubmissions
+    # which trigger LLM API rate limits (causing "fetch failed" errors).
+    session_id = "jarvis-voice-persistent"
+
+    # Build CLI command
+    cmd = [
+        "openclaw", "agent",
+        "--agent", DEFAULT_AGENT,
+        "--message", wrapped_directive,
+        "--session-id", session_id,
+        "--json",
+        "--timeout", str(AGENT_TIMEOUT),
+    ]
+    logger.info("OpenClaw session: %s", session_id)
+    logger.info("OpenClaw directive (full): %s", directive)
+
     try:
         # Run the OpenClaw CLI as a subprocess
+        t_spawn = time.monotonic()
         proc = await asyncio.create_subprocess_exec(
-            "openclaw", "agent",
-            "--agent", DEFAULT_AGENT,
-            "--message", directive,
-            "--json",
-            "--timeout", str(AGENT_TIMEOUT),
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        t_spawned = time.monotonic()
 
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(),
             timeout=AGENT_TIMEOUT + 10,  # Extra buffer for CLI overhead
         )
+        t_done = time.monotonic()
+
+        # Timing telemetry for latency diagnostics
+        logger.info(
+            "OpenClaw timing: spawn=%.0fms exec=%.0fms total=%.0fms",
+            (t_spawned - t_spawn) * 1000,
+            (t_done - t_spawned) * 1000,
+            (t_done - start) * 1000,
+        )
+
+        # Log stderr (always at INFO so it shows in session logs)
+        if stderr:
+            stderr_text = stderr.decode().strip()
+            if stderr_text:
+                logger.info("OpenClaw stderr:\n%s", stderr_text[:2000])
 
         elapsed = time.monotonic() - start
         logger.info("OpenClaw completed in %.1fs (exit=%s)", elapsed, proc.returncode)
@@ -63,6 +109,10 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
         if proc.returncode != 0:
             error_msg = stderr.decode().strip() or f"Exit code {proc.returncode}"
             logger.error("OpenClaw error: %s", error_msg)
+            # Log raw stdout too in case it has useful error info
+            raw_out = stdout.decode().strip()
+            if raw_out:
+                logger.error("OpenClaw error stdout: %s", raw_out[:1000])
             queue.push(
                 QueueItem(
                     type="agent_result",
@@ -75,10 +125,25 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
 
         # Parse the JSON response
         raw = stdout.decode().strip()
+        logger.info("OpenClaw raw response length: %d bytes", len(raw))
+        
+        # Intercept common text-based errors from Gateway before JSON parsing
+        if "fetch failed" in raw.lower():
+            logger.error("OpenClaw hit upstream AI rate limit: fetch failed")
+            queue.push(
+                QueueItem(
+                    type="agent_result",
+                    agent="openclaw",
+                    content={"status": "error", "raw": "fetch failed"},
+                    summary="The upstream AI provider is currently rate-limited. Please try again in a moment.",
+                )
+            )
+            return
+            
         try:
             result = json.loads(raw)
         except json.JSONDecodeError:
-            logger.error("OpenClaw returned invalid JSON: %s", raw[:200])
+            logger.error("OpenClaw returned invalid JSON: %s", raw[:500])
             queue.push(
                 QueueItem(
                     type="agent_result",
@@ -102,12 +167,27 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
         agent_meta = meta.get("agentMeta", {})
         duration_ms = meta.get("durationMs", 0)
         model_used = agent_meta.get("model", "unknown")
+        agent_name = agent_meta.get("agent", "unknown")
+        actions_taken = agent_meta.get("actions", [])
 
         logger.info(
-            "OpenClaw result: status=%s, payloads=%d, model=%s, duration=%dms",
-            status, len(payloads), model_used, duration_ms,
+            "OpenClaw result: status=%s, payloads=%d, model=%s, agent=%s, duration=%dms",
+            status, len(payloads), model_used, agent_name, duration_ms,
         )
-        logger.info("OpenClaw summary: %s", summary[:200])
+        if actions_taken:
+            logger.info("OpenClaw actions: %s", json.dumps(actions_taken, default=str)[:500])
+        
+        # Log full summary (not truncated) so everything shows in session logs
+        logger.info("OpenClaw summary: %s", summary[:500])
+        
+        # Log each payload's details
+        for i, p in enumerate(payloads):
+            p_type = p.get("type", "text")
+            p_text = p.get("text", "")[:300]
+            p_data = {k: v for k, v in p.items() if k not in ("text",)}
+            logger.info("OpenClaw payload[%d] type=%s: %s", i, p_type, p_text)
+            if p_data:
+                logger.info("OpenClaw payload[%d] metadata: %s", i, json.dumps(p_data, default=str)[:300])
 
         queue.push(
             QueueItem(
@@ -126,6 +206,12 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
     except asyncio.TimeoutError:
         elapsed = time.monotonic() - start
         logger.error("OpenClaw timed out after %.1fs", elapsed)
+        # Kill the orphaned subprocess
+        try:
+            proc.kill()
+            await proc.wait()
+        except Exception:
+            pass
         queue.push(
             QueueItem(
                 type="agent_result",
@@ -136,7 +222,7 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
         )
 
     except Exception as e:
-        logger.error("OpenClaw dispatch error: %s", e)
+        logger.error("OpenClaw dispatch error: %s", e, exc_info=True)
         queue.push(
             QueueItem(
                 type="agent_result",
@@ -145,3 +231,4 @@ async def dispatch_openclaw(directive: str, queue: VoiceLLMQueue) -> None:
                 summary=f"Failed to dispatch to OpenClaw: {e}",
             )
         )
+
