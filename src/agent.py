@@ -22,6 +22,7 @@ from livekit.agents import (
     tts,
     voice,
 )
+from livekit.agents.types import APIConnectOptions
 from livekit.plugins import deepgram, elevenlabs, google, silero
 
 from openclaw_client import dispatch_openclaw as dispatch_openclaw_real
@@ -489,7 +490,11 @@ async def entrypoint(ctx: JobContext):
                 try:
                     import time as _time
                     _llm_start = _time.monotonic()
-                    response = llm_model.chat(chat_ctx=chat_ctx, tools=tools_context.flatten())
+                    response = llm_model.chat(
+                        chat_ctx=chat_ctx,
+                        tools=tools_context.flatten(),
+                        conn_options=APIConnectOptions(max_retry=0, timeout=15.0),
+                    )
 
                     # Async channel for streaming text tokens → TTS in real-time
                     text_queue: asyncio.Queue[str | None] = asyncio.Queue()
@@ -577,7 +582,9 @@ async def entrypoint(ctx: JobContext):
                             logger.warning("Failed to interrupt speech handle on error: %s", e_int)
                             
                     if attempt < 2:
-                        await asyncio.sleep(0.5 * (attempt + 1))
+                        backoff = 2.0 * (attempt + 1)  # 2s, then 4s
+                        logger.info("Retrying in %.1fs...", backoff)
+                        await asyncio.sleep(backoff)
                         speech_text = ""
                         tool_calls = []
                     else:
