@@ -211,6 +211,10 @@ class VoiceTools:
         """Fire off any queued directives as tracked background tasks."""
         use_stub = os.environ.get("USE_OPENCLAW_STUB", "").lower() in ("1", "true", "yes")
         dispatch_fn = dispatch_openclaw_stub if use_stub else dispatch_openclaw_real
+        if not hasattr(self, '_dispatch_logged'):
+            mode = "stub (simulated)" if use_stub else "OpenClaw CLI"
+            logger.info("Dispatch mode: %s", mode)
+            self._dispatch_logged = True
         # Clean up completed tasks first
         self._inflight_tasks = [t for t in self._inflight_tasks if not t.done()]
         for d in self._pending_directives:
@@ -302,17 +306,21 @@ async def entrypoint(ctx: JobContext):
     vad_model = ctx.proc.userdata["vad"]
     stt_model = deepgram.STT(api_key=os.environ["DEEPGRAM_API_KEY"])
     llm_model = google.LLM(
-        model="gemini-3-flash-preview",
+        model=os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"),
         api_key=os.environ["GEMINI_API_KEY"],
         thinking_config=genai_types.ThinkingConfig(thinking_level="LOW"),
         tool_choice="auto",
     )
     tts_model = elevenlabs.TTS(
         api_key=os.environ["ELEVENLABS_API_KEY"],
-        model="eleven_flash_v2_5",
-        voice_id="lUTamkMw7gOzZbFIwmq4",
+        model=os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5"),
+        voice_id=os.environ.get("ELEVENLABS_VOICE_ID", "lUTamkMw7gOzZbFIwmq4"),
         voice_settings=elevenlabs.VoiceSettings(
-            speed=1.14, stability=0.40, similarity_boost=0.75, style=0.0, use_speaker_boost=True
+            speed=float(os.environ.get("ELEVENLABS_SPEED", "1.14")),
+            stability=float(os.environ.get("ELEVENLABS_STABILITY", "0.40")),
+            similarity_boost=float(os.environ.get("ELEVENLABS_SIMILARITY", "0.75")),
+            style=float(os.environ.get("ELEVENLABS_STYLE", "0.0")),
+            use_speaker_boost=True,
         ),
     )
 

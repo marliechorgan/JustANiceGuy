@@ -37,7 +37,7 @@ User speaks → STT transcript → Voice LLM → Streamed TTS (instant)
 | **LLM** | [Google Gemini](https://ai.google.dev/) (`gemini-3-flash-preview`, with thinking) |
 | **TTS** | [ElevenLabs](https://elevenlabs.io/) (`eleven_flash_v2_5`, streaming) |
 | **VAD** | [Silero](https://github.com/snakers4/silero-vad) |
-| **Sub-agents** | OpenClaw (natural language dispatch) |
+| **Sub-agents** | [OpenClaw](https://github.com/marliechorgan/openclaw) (natural language dispatch) |
 
 ---
 
@@ -46,6 +46,7 @@ User speaks → STT transcript → Voice LLM → Streamed TTS (instant)
 ### Prerequisites
 
 - Python ≥ 3.10
+- Node ≥ 22 (for [OpenClaw](https://github.com/marliechorgan/openclaw))
 - API keys for: [LiveKit](https://cloud.livekit.io/), [Deepgram](https://console.deepgram.com/), [Google Gemini](https://aistudio.google.com/app/apikey), [ElevenLabs](https://elevenlabs.io/)
 
 ### Setup
@@ -55,23 +56,30 @@ User speaks → STT transcript → Voice LLM → Streamed TTS (instant)
 git clone https://github.com/marliechorgan/JustANiceGuy.git
 cd JustANiceGuy
 
-# 2. Create and activate a virtual environment
+# 2. Install OpenClaw (the agent system JARVIS dispatches to)
+npm install -g openclaw@latest
+openclaw onboard --install-daemon
+
+# 3. Create and activate a Python virtual environment
 python -m venv venv
 source venv/bin/activate
 
-# 3. Install dependencies
+# 4. Install dependencies
 pip install -e .
 
-# 4. Download Silero VAD model files
+# 5. Download Silero VAD model files
 python src/agent.py download-files
 
-# 5. Configure environment variables
+# 6. Configure environment variables
 cp .env.example .env
 # Edit .env and fill in your API keys
 
-# 6. Run in dev mode
+# 7. Run in dev mode
 python src/agent.py dev
 ```
+
+> **Don't have OpenClaw?** Set `USE_OPENCLAW_STUB=true` in your `.env` to use
+> a built-in demo that simulates agent responses with Gemini.
 
 ### Test in the LiveKit Playground
 
@@ -137,6 +145,26 @@ The LLM dispatches tasks in plain English — no structured parameters, no agent
 
 ---
 
+## OpenClaw Integration
+
+JARVIS uses [OpenClaw](https://github.com/marliechorgan/openclaw) as its agent system. When you say *"Check my emails"*, JARVIS dispatches a natural language directive to OpenClaw, which routes it to the right sub-agent, executes the task, and returns results back to the voice loop.
+
+### How it connects
+
+JARVIS calls the `openclaw agent` CLI under the hood:
+
+```bash
+openclaw agent --agent main --message "Check Charlie's inbox" --json
+```
+
+OpenClaw's Gateway handles routing, agent selection, and execution. JARVIS never needs to know which sub-agent handles email, GitHub, calendar, etc. — it just describes what needs to happen in plain English.
+
+### Without OpenClaw
+
+If you don't have OpenClaw installed, set `USE_OPENCLAW_STUB=true` in your `.env`. The stub uses Gemini to simulate realistic agent responses — useful for testing the voice loop without a real agent system.
+
+---
+
 ## Project Structure
 
 ```
@@ -173,17 +201,25 @@ For the full architecture specification, see [`docs/architecture.md`](docs/archi
 
 ### Environment Variables
 
-See [`.env.example`](.env.example) for all required variables. Key settings:
+See [`.env.example`](.env.example) for all variables. Key settings:
 
-| Variable | Description |
-|----------|-------------|
-| `LIVEKIT_URL` | Your LiveKit Cloud project URL |
-| `LIVEKIT_API_KEY` | LiveKit API key |
-| `LIVEKIT_API_SECRET` | LiveKit API secret |
-| `DEEPGRAM_API_KEY` | Deepgram STT API key |
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `ELEVENLABS_API_KEY` | ElevenLabs TTS API key |
-| `USE_OPENCLAW_STUB` | Set to `true` to use the demo stub instead of real OpenClaw |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `LIVEKIT_URL` | ✅ | — | Your LiveKit Cloud project URL |
+| `LIVEKIT_API_KEY` | ✅ | — | LiveKit API key |
+| `LIVEKIT_API_SECRET` | ✅ | — | LiveKit API secret |
+| `DEEPGRAM_API_KEY` | ✅ | — | Deepgram STT API key |
+| `GEMINI_API_KEY` | ✅ | — | Google Gemini API key |
+| `ELEVENLABS_API_KEY` | ✅ | — | ElevenLabs TTS API key |
+| `GEMINI_MODEL` | | `gemini-3-flash-preview` | Gemini model to use |
+| `ELEVENLABS_MODEL` | | `eleven_flash_v2_5` | ElevenLabs TTS model |
+| `ELEVENLABS_VOICE_ID` | | `lUTamkMw7gOzZbFIwmq4` | Voice ID ([browse voices](https://elevenlabs.io/voice-library)) |
+| `ELEVENLABS_SPEED` | | `1.14` | Speech speed (0.7–1.3) |
+| `ELEVENLABS_STABILITY` | | `0.40` | Voice stability (0.0–1.0) |
+| `ELEVENLABS_SIMILARITY` | | `0.75` | Voice similarity boost (0.0–1.0) |
+| `USE_OPENCLAW_STUB` | | *(off)* | Set to `true` to use a simulated demo instead of real OpenClaw |
+| `OPENCLAW_AGENT` | | `main` | OpenClaw agent to route directives to |
+| `OPENCLAW_TIMEOUT` | | `600` | OpenClaw CLI timeout in seconds |
 
 ---
 

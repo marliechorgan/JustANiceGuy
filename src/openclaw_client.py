@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 
@@ -19,11 +20,9 @@ from voice_queue import QueueItem, VoiceLLMQueue
 
 logger = logging.getLogger("niceguy.openclaw")
 
-# Default agent to route to (OpenClaw's "main" agent handles routing)
-DEFAULT_AGENT = "main"
-
-# Timeout for agent execution (seconds)
-AGENT_TIMEOUT = 600
+# Configurable via .env (see .env.example)
+DEFAULT_AGENT = os.environ.get("OPENCLAW_AGENT", "main")
+AGENT_TIMEOUT = int(os.environ.get("OPENCLAW_TIMEOUT", "600"))
 
 # Voice-specific context prepended to every directive.
 # Tells the main agent to handle simple tasks directly instead of
