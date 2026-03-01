@@ -171,9 +171,13 @@ class VoiceTools:
     )
     async def set_turn_mode(self, mode: str) -> str:
         """Control what happens after you finish speaking."""
-        if mode in ["ACKWAIT", "CONTINUE", "CONV", "END"]:
+        valid = {"ACKWAIT", "CONTINUE", "CONV", "END"}
+        if mode in valid:
             self.current_turn_mode = mode
             logger.info("LLM set turn mode to: %s", mode)
+        else:
+            logger.warning("LLM sent invalid mode '%s' — defaulting to CONV", mode)
+            self.current_turn_mode = "CONV"
         return "Mode set."
 
     def flush_pending(self) -> None:
@@ -444,7 +448,8 @@ async def entrypoint(ctx: JobContext):
 
             import time as _time
             _turn_start = _time.monotonic()
-            logger.info("Generating LLM response...")
+            _ctx_items = len(chat_ctx.items)
+            logger.info("Generating LLM response... (ctx_items=%d)", _ctx_items)
             UIState.llm_status = "Thinking..."
             UIState.llm_error_count = 0
 
@@ -681,7 +686,18 @@ async def entrypoint(ctx: JobContext):
                     if clean.strip():
                         chat_ctx.add_message(role="assistant", content=clean)
 
-            # --- Wait for TTS to finish playing before deciding next step ---
+            # --- Turn mode logic (check BEFORE TTS await for pre-fetch) ---
+            mode = tools.current_turn_mode
+            logger.info("Turn mode decided: %s", mode)
+
+            if mode == "CONTINUE":
+                # Start next LLM call WITHOUT waiting for TTS to finish.
+                # This overlaps LLM TTFB with TTS playout, hiding latency.
+                # The next session.say() will queue behind the current one.
+                logger.info("CONTINUE — pre-fetching next LLM call (TTS still playing)")
+                continue  # Re-run LLM immediately
+
+            # --- For non-CONTINUE modes, wait for TTS to finish ---
             if speech_text:
                 logger.info("Waiting for TTS playout...")
                 UIState.tts_status = "Speaking..."
@@ -699,13 +715,7 @@ async def entrypoint(ctx: JobContext):
                 finally:
                     UIState.tts_playing = False  # Bug #1: Un-gate STT
 
-            # --- Turn mode logic ---
-            mode = tools.current_turn_mode
-            logger.info("Turn mode decided: %s", mode)
-
-            if mode == "CONTINUE":
-                continue  # Re-run LLM immediately (TTS already finished)
-            elif mode == "ACKWAIT":
+            if mode == "ACKWAIT":
                 break  # Wait for queue or user
             elif mode == "CONV":
                 break  # Wait for user
