@@ -104,21 +104,20 @@ def setup_cli_ui():
                 padding=(0, 1),
             )
         
-        # Optimised 3D sphere — fixed position, organic surface animation
+        # Optimised 3D sphere — mesmerizing rotation, fluid organic surface
         GX, GY = 56, 24
         ASPECT = 2.1  # terminal char aspect ratio compensation
         chars = " .,:;+*#@"
         NC = len(chars) - 1
         lines = []
         
-        # Fixed radius with subtle breathing
+        # Reactive radius with subtle breathing
         R = 0.88
-        breath = math.sin(t * 1.8) * 0.02  # slow gentle pulse
+        breath = math.sin(t * 1.5) * 0.02
         if is_speaking:
-            # Stronger pulse when speaking
-            R += math.sin(t * 5.0) * 0.04 + 0.03 + breath
+            R += math.sin(t * 5.0) * 0.03 + breath
         elif not muted and vol > 0:
-            R += min(vol / 120.0, 0.08) + breath
+            R += min(vol / 120.0, 0.06) + breath
         else:
             R += breath
 
@@ -127,6 +126,16 @@ def setup_cli_ui():
             elapsed = t - UIState.start_time
             if elapsed < 2.0:
                 R *= (elapsed / 2.0) ** 2
+
+        # 3D Rotation Matrix Calculation
+        # Spin around Y axis (faster when speaking)
+        spd = 2.0 if is_speaking else 0.5
+        ry = t * spd
+        cy, sy = math.cos(ry), math.sin(ry)
+        
+        # Gentle tilt on X axis to see the "poles" rotating
+        rx = 0.4
+        cx, sx = math.cos(rx), math.sin(rx)
         
         for y in range(GY):
             row = []
@@ -137,44 +146,76 @@ def setup_cli_ui():
                 d2 = nx * nx + ny2
                 
                 if d2 < R * R:
+                    # Calculate depth (Z) on the sphere surface
                     nz = math.sqrt(R * R - d2)
                     
-                    # Multi-octave organic noise (no rotation — stays in place)
-                    n1 = math.sin(nx * 7.0 + t * 1.2) * math.cos(ny * 5.0 - t * 0.8) * 0.25
-                    n2 = math.sin((nx + ny) * 4.0 + t * 1.5) * 0.15
-                    n3 = math.sin(nx * 12.0 - t * 2.0) * math.sin(ny * 10.0 + t * 1.0) * 0.1
-                    noise = n1 + n2 + n3
+                    # Apply INVERSE rotation to map current 2D screen coordinate
+                    # back to the 3D surface of the rotating sphere.
+                    # Undo X tilt:
+                    ty = ny * cx + nz * sx
+                    tz = -ny * sx + nz * cx
+                    tx = nx
                     
-                    # Base lighting — fixed directional (top-left, into screen)
-                    light = max(0.0, nx * (-0.4) + ny * (-0.6) + nz * 0.65)
+                    # Undo Y spin:
+                    ox = tx * cy + tz * sy
+                    oz = -tx * sy + tz * cy
+                    oy = ty
                     
-                    # Fresnel-style rim glow (brighter at edges)
-                    rim = (1.0 - nz / R) ** 2.5 * 0.3
+                    # Evaluate organic noise using the locked 3D surface coordinates (ox, oy, oz)
+                    # This makes the "texture" spin perfectly with the sphere
+                    noise = (
+                        math.sin(ox * 7.0 + t * 2.0) * math.cos(oy * 6.0) * 0.2 +
+                        math.sin(oy * 5.0 - t * 1.0) * math.cos(oz * 4.0) * 0.2 +
+                        math.sin((ox + oz) * 5.0) * 0.1
+                    )
                     
-                    if is_speaking:
-                        # Ripple emanating from centre
-                        dist = math.sqrt(d2)
-                        ripple = math.sin(dist * 12.0 - t * 8.0) * 0.2 * max(0, 1.0 - dist)
-                        # Shimmer across surface
-                        shimmer = math.sin(nx * 15.0 + t * 6.0) * math.cos(ny * 10.0 - t * 4.0) * 0.15
-                        light += ripple + shimmer + noise * 0.4 + rim + 0.12
-                    elif not muted and vol > 0:
-                        # Audio bands drive surface glow
-                        band = int((x / GX) * 14)
-                        band = max(0, min(13, band))
-                        light += levels[band] / 12.0 + noise * (vol / 50.0) + rim
+                    # Base directional lighting (top-left, fixed to screen)
+                    light = max(0.0, nx * (-0.4) + ny * (-0.6) + nz * 0.6)
+                    
+                    # Rim glow at the edges of the sphere
+                    rim = (1.0 - nz / R) ** 2.0 * 0.3
+                    
+                    # Calculate final brightness
+                    bright = light + noise + rim
+                    
+                    if is_speaking or (not muted and vol > 0):
+                        # Audio reactivity - map freq bands around the sphere's equator (lon/lat)
+                        lat = max(0.0, 1.0 - abs(oy) * 1.5)  # Intensity drops off near poles
+                        lon = (math.atan2(oz, ox) / math.pi + 1.0) / 2.0  # Range 0.0 to 1.0
+                        band_idx = int(lon * 13)
+                        band_val = levels[band_idx] / 10.0 if band_idx < len(levels) else 0
+                        
+                        if is_speaking:
+                            # Speaking mode: Audio bands + Front-facing pulsing waves
+                            front_dist = math.sqrt(nx*nx + ny*ny)
+                            pulse = math.sin(front_dist * 10.0 - t * 8.0) * 0.3 * max(0, 1.0 - front_dist * 1.5)
+                            bright += band_val * lat * 0.5 + pulse + 0.15
+                        else:
+                            # Listening mode: Pure audio bands reacting around the surface
+                            bright += band_val * lat * 0.8
                     else:
-                        # Idle: gentle surface motion + rim highlight
-                        light += noise * 0.12 + rim + math.sin(t * 1.0) * 0.03
+                        # Idle: Just slow breathing shift
+                        bright += math.sin(t) * 0.05
                     
-                    idx = int(max(0.0, min(1.0, light)) * NC + 0.5)
+                    # Map brightness to character index
+                    idx = int(max(0.0, min(1.0, bright)) * NC + 0.5)
                     ch = chars[idx]
-                    if idx > NC - 2:
-                        row.append(f"[bold]{ch}[/bold]")
-                    elif idx > NC // 2:
-                        row.append(ch)
+                    
+                    # Color formatting
+                    if is_speaking:
+                        if idx > NC - 2:
+                            row.append(f"[bold bright_cyan]{ch}[/bold bright_cyan]")
+                        elif idx > NC // 2:
+                            row.append(f"[cyan]{ch}[/cyan]")
+                        else:
+                            row.append(f"[dim cyan]{ch}[/dim cyan]")
                     else:
-                        row.append(f"[dim]{ch}[/dim]")
+                        if idx > NC - 2:
+                            row.append(f"[bold]{ch}[/bold]")
+                        elif idx > NC // 2:
+                            row.append(ch)
+                        else:
+                            row.append(f"[dim]{ch}[/dim]")
                 else:
                     row.append(" ")
             lines.append("".join(row))
