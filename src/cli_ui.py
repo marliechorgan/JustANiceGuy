@@ -104,33 +104,33 @@ def setup_cli_ui():
                 padding=(0, 1),
             )
         
-        # Optimised 3D sphere with organic surface animation
-        GX, GY = 40, 18
+        # Optimised 3D sphere — fixed position, organic surface animation
+        GX, GY = 56, 24
+        ASPECT = 2.1  # terminal char aspect ratio compensation
         chars = " .,:;+*#@"
         NC = len(chars) - 1
         lines = []
         
-        # Reactive radius
-        R = 0.82
+        # Fixed radius with subtle breathing
+        R = 0.88
+        breath = math.sin(t * 1.8) * 0.02  # slow gentle pulse
         if is_speaking:
-            R += math.sin(t * 6.0) * 0.06 + 0.04
-        elif not muted:
-            R += min(vol / 100.0, 0.15)
+            # Stronger pulse when speaking
+            R += math.sin(t * 5.0) * 0.04 + 0.03 + breath
+        elif not muted and vol > 0:
+            R += min(vol / 120.0, 0.08) + breath
+        else:
+            R += breath
 
         # Startup animation
         if UIState.start_time is not None:
             elapsed = t - UIState.start_time
             if elapsed < 2.0:
                 R *= (elapsed / 2.0) ** 2
-
-        # Rotation
-        spd = 2.0 if is_speaking else 0.6
-        ry = t * spd
-        cy, sy = math.cos(ry), math.sin(ry)
         
         for y in range(GY):
             row = []
-            ny = (y - GY / 2.0) / (GY / 2.0) * 2.0
+            ny = (y - GY / 2.0) / (GY / 2.0) * ASPECT
             ny2 = ny * ny
             for x in range(GX):
                 nx = (x - GX / 2.0) / (GX / 2.0)
@@ -138,28 +138,34 @@ def setup_cli_ui():
                 
                 if d2 < R * R:
                     nz = math.sqrt(R * R - d2)
-                    rx = nx * cy + nz * sy
-                    rz = -nx * sy + nz * cy
                     
-                    noise = (
-                        math.sin(rx * 8.0 + t * 3.0) * 0.3 +
-                        math.sin(ny * 6.0 + t * 2.0) * 0.2 +
-                        math.sin((rx + ny) * 5.0 - t * 4.0) * 0.2
-                    )
+                    # Multi-octave organic noise (no rotation — stays in place)
+                    n1 = math.sin(nx * 7.0 + t * 1.2) * math.cos(ny * 5.0 - t * 0.8) * 0.25
+                    n2 = math.sin((nx + ny) * 4.0 + t * 1.5) * 0.15
+                    n3 = math.sin(nx * 12.0 - t * 2.0) * math.sin(ny * 10.0 + t * 1.0) * 0.1
+                    noise = n1 + n2 + n3
                     
-                    light = max(0.0, nx * (-0.5) + ny * (-0.7) + nz * 0.5)
+                    # Base lighting — fixed directional (top-left, into screen)
+                    light = max(0.0, nx * (-0.4) + ny * (-0.6) + nz * 0.65)
+                    
+                    # Fresnel-style rim glow (brighter at edges)
+                    rim = (1.0 - nz / R) ** 2.5 * 0.3
                     
                     if is_speaking:
-                        ox = math.cos(t * 4.0) * 0.6
-                        oy = math.sin(t * 4.0) * 0.6
-                        spot = max(0.0, 1.0 - ((nx - ox)**2 + (ny - oy)**2) * 3.0)
-                        light += spot * 0.7 + noise * 0.5 + 0.15
+                        # Ripple emanating from centre
+                        dist = math.sqrt(d2)
+                        ripple = math.sin(dist * 12.0 - t * 8.0) * 0.2 * max(0, 1.0 - dist)
+                        # Shimmer across surface
+                        shimmer = math.sin(nx * 15.0 + t * 6.0) * math.cos(ny * 10.0 - t * 4.0) * 0.15
+                        light += ripple + shimmer + noise * 0.4 + rim + 0.12
                     elif not muted and vol > 0:
+                        # Audio bands drive surface glow
                         band = int((x / GX) * 14)
                         band = max(0, min(13, band))
-                        light += levels[band] / 10.0 + noise * (vol / 40.0)
+                        light += levels[band] / 12.0 + noise * (vol / 50.0) + rim
                     else:
-                        light += noise * 0.15 + math.sin(t * 1.5) * 0.05
+                        # Idle: gentle surface motion + rim highlight
+                        light += noise * 0.12 + rim + math.sin(t * 1.0) * 0.03
                     
                     idx = int(max(0.0, min(1.0, light)) * NC + 0.5)
                     ch = chars[idx]
@@ -258,10 +264,10 @@ def setup_cli_ui():
         visualizer = lk_cli.FrequencyVisualizer(c, label=c.input_name or "unknown")
         visualizer.update()
 
-        with Live(visualizer, console=c.console, refresh_per_second=15, transient=True):
+        with Live(visualizer, console=c.console, refresh_per_second=20, transient=True):
             while not ctrl_t_e.is_set():
                 visualizer.update()
-                time.sleep(0.05)
+                time.sleep(0.04)
 
         c.set_microphone_enabled(False)
         c.set_speaker_enabled(False)

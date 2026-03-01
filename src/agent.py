@@ -324,12 +324,18 @@ async def entrypoint(ctx: JobContext):
     # --- Real models (used by our manual loop) ---
     vad_model = ctx.proc.userdata["vad"]
     stt_model = deepgram.STT(api_key=os.environ["DEEPGRAM_API_KEY"])
-    llm_model = google.LLM(
+    # Only enable thinking for models that support it (gemini-3 series)
+    _llm_kwargs = dict(
         model=_gemini_model,
         api_key=os.environ["GEMINI_API_KEY"],
-        thinking_config=genai_types.ThinkingConfig(thinking_level="LOW"),
         tool_choice="auto",
     )
+    if "gemini-3" in _gemini_model:
+        _llm_kwargs["thinking_config"] = genai_types.ThinkingConfig(thinking_level="LOW")
+        logger.info("Thinking mode: LOW (gemini-3)")
+    else:
+        logger.info("Thinking mode: OFF (not supported by %s)", _gemini_model)
+    llm_model = google.LLM(**_llm_kwargs)
     tts_model = elevenlabs.TTS(
         api_key=os.environ["ELEVENLABS_API_KEY"],
         model=_tts_model,
