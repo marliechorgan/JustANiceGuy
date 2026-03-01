@@ -172,12 +172,16 @@ def setup_cli_ui():
                     # High-frequency sparkling noise
                     sparkle = 0
                     if is_speaking or (not muted and vol > 0):
-                        s1 = math.sin(ox * 30.0 + t * 15.0)
-                        s2 = math.cos(oy * 25.0 - t * 12.0)
-                        s3 = math.sin(oz * 35.0 + t * 20.0)
-                        if (s1 * s2 * s3) > 0.4:
+                        # Extreme high frequency intersecting waves
+                        s1 = math.sin(ox * 25.0 + t * 18.0)
+                        s2 = math.cos(oy * 20.0 - t * 15.0)
+                        s3 = math.sin(oz * 30.0 + t * 22.0)
+                        val = s1 * s2 * s3
+                        
+                        # Lowered threshold to create far more specks
+                        if val > 0.15:
                             lat = max(0.0, 1.0 - abs(oy) * 1.5)
-                            sparkle = (s1 * s2 * s3) * lat * 1.5
+                            sparkle = val * lat * 2.5
                     
                     # Base directional lighting (top-left, fixed to screen)
                     light = max(0.0, nx * (-0.4) + ny * (-0.6) + nz * 0.6)
@@ -199,10 +203,10 @@ def setup_cli_ui():
                             # Speaking mode: Audio bands + Front-facing pulsing waves + sparks
                             front_dist = math.sqrt(nx*nx + ny*ny)
                             pulse = math.sin(front_dist * 10.0 - t * 8.0) * 0.3 * max(0, 1.0 - front_dist * 1.5)
-                            bright += band_val * lat * 0.5 + pulse + 0.15 + sparkle
+                            bright += band_val * lat * 0.5 + pulse + 0.15 + sparkle * 0.5
                         else:
                             # Listening mode: Pure audio bands reacting around the surface + sparks
-                            bright += band_val * lat * 0.8 + sparkle
+                            bright += band_val * lat * 0.8 + sparkle * 0.5
                     else:
                         # Idle: Just slow breathing shift
                         bright += math.sin(t) * 0.05
@@ -212,28 +216,33 @@ def setup_cli_ui():
                     idx = max(0, min(NC, idx))
                     ch = chars[idx]
                     
-                    # Color formatting
-                    if is_speaking:
-                        if sparkle > 0.5:
-                            row.append(f"[bold bright_white]{ch}[/bold bright_white]")
-                        elif sparkle > 0.2:
-                            row.append(f"[bold bright_cyan]{ch}[/bold bright_cyan]")
-                        elif idx > NC - 2:
-                            row.append(f"[bold cyan]{ch}[/bold cyan]")
-                        elif idx > NC // 2:
-                            row.append(f"[cyan]{ch}[/cyan]")
-                        else:
-                            row.append(f"[dim cyan]{ch}[/dim cyan]")
-                    elif not muted and vol > 0:
-                        if sparkle > 0.5:
-                            row.append(f"[bold bright_yellow]{ch}[/bold bright_yellow]")
-                        elif idx > NC - 2:
-                            row.append(f"[bold]{ch}[/bold]")
-                        elif idx > NC // 2:
-                            row.append(ch)
-                        else:
-                            row.append(f"[dim]{ch}[/dim]")
-                    else:
+                    # Mesmerizing color formatting
+                    if is_speaking or (not muted and vol > 0):
+                        if sparkle > 0.2:
+                            # Mesmerizing, flickering neon palette
+                            neon = ["#00FFFF", "#FF00FF", "#FFFF00", "#00FF66", "#FF3399", "#9933FF", "#FFFFFF", "#00CCFF"]
+                            # Rapidly shifting color index based on 3D coordinate and time
+                            cidx = int(abs(math.sin(ox*12 + oz*8 + t*4)) * len(neon)) % len(neon)
+                            
+                            if sparkle > 0.5:
+                                row.append(f"[bold {neon[cidx]}]{ch}[/]")
+                            else:
+                                row.append(f"[{neon[cidx]}]{ch}[/]")
+                        elif is_speaking:
+                            if idx > NC - 2:
+                                row.append(f"[bold cyan]{ch}[/bold cyan]")
+                            elif idx > NC // 2:
+                                row.append(f"[cyan]{ch}[/cyan]")
+                            else:
+                                row.append(f"[dim cyan]{ch}[/dim cyan]")
+                        else: # user speaking (listening)
+                            if idx > NC - 2:
+                                row.append(f"[bold]{ch}[/bold]")
+                            elif idx > NC // 2:
+                                row.append(ch)
+                            else:
+                                row.append(f"[dim]{ch}[/dim]")
+                    else: # idle
                         if idx > NC - 2:
                             row.append(f"[bold]{ch}[/bold]")
                         elif idx > NC // 2:
@@ -242,55 +251,16 @@ def setup_cli_ui():
                             row.append(f"[dim]{ch}[/dim]")
                 else:
                     row.append(" ")
-            # Center the sphere within an 88-character width
-            # Sphere is 56 chars wide. (88 - 56) / 2 = 16 spaces padding
-            lines.append(" " * 16 + "".join(row))
             
-        lines.append("")
-        
-        # --- Status line ---
-        status_parts = []
-        if UIState.llm_status:
-            if UIState.llm_error_count > 0:
-                status_parts.append(f"[bold reverse] {UIState.llm_status} [/bold reverse]")
-            else:
-                status_parts.append(f"[dim]{UIState.llm_status}[/dim]")
-        if UIState.tts_status:
-            status_parts.append(f"[dim]{UIState.tts_status}[/dim]")
-        if UIState.openclaw_status:
-            status_parts.append(f"[dim]{UIState.openclaw_status}[/dim]")
-        if status_parts:
-            lines.append("  ".join(status_parts))
-        
-        # --- TTFB indicator ---
-        if UIState.last_ttfb_ms > 0 and not UIState.llm_status:
-            lines.append(f"[dim]Last TTFB: {UIState.last_ttfb_ms:.0f}ms[/dim]")
-        
-        # --- Service health bar ---
-        errs = UIState.session_errors
-        err_parts = []
-        for svc, count in errs.items():
-            if count > 0:
-                err_parts.append(f"{svc}:{count}")
-        if err_parts:
-            lines.append(f"[bold reverse] Errors: {' | '.join(err_parts)} [/bold reverse]")
-        
-        lines.append("")
-        if UIState.last_user:
-            lines.append(f"[dim]You:[/dim] {UIState.last_user}")
-        if UIState.last_agent:
-            lines.append(f"[bold]JARVIS:[/bold] {UIState.last_agent}")
+            # Sphere is exactly 56 chars wide. We'll use a 60-char panel. 2 spaces padding.
+            lines.append("  " + "".join(row))
             
-        lines.append("")
-        lines.append("[dim]Controls: \\[m] Mute Mic | \\[l] Toggle Logs[/dim]")
-        if muted:
-            lines.append("[bold]MIC MUTED[/bold]")
-            
+        # UI string is now cleanly JUST the sphere. No text, no logs.
         return Panel(
             Text.from_markup("\n".join(lines)), 
             title="[bold]JARVIS[/bold]",
-            width=92,
-            padding=(1, 2)
+            width=60,
+            padding=(1, 0)
         )
     lk_cli.FrequencyVisualizer.__rich__ = _custom_rich
 
