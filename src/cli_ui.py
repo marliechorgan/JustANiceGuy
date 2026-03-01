@@ -104,37 +104,26 @@ def setup_cli_ui():
                 padding=(0, 1),
             )
         
-        # Optimised 3D sphere — mesmerizing rotation, sparkling organic surface
+        # Optimised 3D sphere — sparse, liquid, evolving, mesmerising
         GX, GY = 56, 24
         ASPECT = 2.1  # terminal char aspect ratio compensation
         chars = " .,:;+*#@"
         NC = len(chars) - 1
         lines = []
         
-        # Reactive radius with subtle breathing
-        R = 0.88
-        breath = math.sin(t * 1.5) * 0.02
+        # Liquid base radius
+        R = 0.85
         if is_speaking:
-            R += math.sin(t * 5.0) * 0.03 + breath
-        elif not muted and vol > 0:
-            R += min(vol / 120.0, 0.06) + breath
-        else:
-            R += breath
+            R += math.sin(t * 2.0) * 0.04
+        elif vol > 0:
+            R += min(vol / 150.0, 0.05)
 
-        # Startup animation
-        if UIState.start_time is not None:
-            elapsed = t - UIState.start_time
-            if elapsed < 2.0:
-                R *= (elapsed / 2.0) ** 2
-
-        # 3D Rotation Matrix Calculation
-        # Spin around Y axis (faster when speaking)
-        spd = 2.0 if is_speaking else 0.5
+        # Original tumbling "wobble" rotation
+        spd = 0.8 if is_speaking else 0.3
         ry = t * spd
         cy, sy = math.cos(ry), math.sin(ry)
         
-        # Gentle tilt on X axis to see the "poles" rotating
-        rx = 0.4
+        rx = math.sin(t * 0.4) * 0.5  # Tumbling X axis
         cx, sx = math.cos(rx), math.sin(rx)
         
         for y in range(GY):
@@ -149,106 +138,63 @@ def setup_cli_ui():
                     # Calculate depth (Z) on the sphere surface
                     nz = math.sqrt(R * R - d2)
                     
-                    # Apply INVERSE rotation to map current 2D screen coordinate
-                    # back to the 3D surface of the rotating sphere.
-                    # Undo X tilt:
-                    ty = ny * cx + nz * sx
-                    tz = -ny * sx + nz * cx
-                    tx = nx
+                    # Apply tumbling rotation to the visual coordinates
+                    # This gives the "wobble" of the overall shape
+                    px = nx * cy + nz * sy
+                    pz = -nx * sy + nz * cy
+                    py = ny
                     
-                    # Undo Y spin:
-                    ox = tx * cy + tz * sy
-                    oz = -tx * sy + tz * cy
-                    oy = ty
+                    px2 = px
+                    py2 = py * cx + pz * sx
+                    pz2 = -py * sx + pz * cx
                     
-                    # Evaluate organic noise using the locked 3D surface coordinates (ox, oy, oz)
-                    # This makes the "texture" spin perfectly with the sphere
-                    noise = (
-                        math.sin(ox * 7.0 + t * 2.0) * math.cos(oy * 6.0) * 0.2 +
-                        math.sin(oy * 5.0 - t * 1.0) * math.cos(oz * 4.0) * 0.2 +
-                        math.sin((ox + oz) * 5.0) * 0.1
-                    )
+                    # Smooth, slow liquid noise acting as "density"
+                    n1 = math.sin(px2 * 5.0 + t * 1.2) * math.cos(py2 * 4.0 - t * 0.8)
+                    n2 = math.cos((px2 + py2) * 3.0 + t * 1.5)
+                    n3 = math.sin(pz2 * 6.0 - t * 1.0)
                     
-                    # High-frequency sparkling noise
-                    sparkle = 0
-                    if is_speaking or (not muted and vol > 0):
-                        # Extreme high frequency intersecting waves
-                        s1 = math.sin(ox * 25.0 + t * 18.0)
-                        s2 = math.cos(oy * 20.0 - t * 15.0)
-                        s3 = math.sin(oz * 30.0 + t * 22.0)
-                        val = s1 * s2 * s3
-                        
-                        # Lowered threshold to create far more specks
-                        if val > 0.15:
-                            lat = max(0.0, 1.0 - abs(oy) * 1.5)
-                            sparkle = val * lat * 2.5
+                    # The wave height defines the "liquid" surface volume
+                    wave = (n1 + n2 + n3) / 3.0
                     
-                    # Base directional lighting (top-left, fixed to screen)
-                    light = max(0.0, nx * (-0.4) + ny * (-0.6) + nz * 0.6)
+                    if is_speaking or vol > 0:
+                        # Speech ripples the liquid geometry vividly
+                        wave += math.sin(math.sqrt(px2**2 + py2**2) * 10.0 - t * 8.0) * 0.3 * (vol / 50.0)
                     
-                    # Rim glow at the edges of the sphere
-                    rim = (1.0 - nz / R) ** 2.0 * 0.3
+                    # DENSITY THRESHOLD: Not all pixels are lit!
+                    # This makes it sparse, creating floating liquid blobs
+                    density_threshold = 0.15 if is_speaking else 0.25
+                    if wave < density_threshold:
+                        row.append(" ")
+                        continue
                     
-                    # Calculate final brightness
-                    bright = light + noise + rim
-                    
-                    if is_speaking or (not muted and vol > 0):
-                        # Audio reactivity - map freq bands around the sphere's equator (lon/lat)
-                        lat = max(0.0, 1.0 - abs(oy) * 1.5)  # Intensity drops off near poles
-                        lon = (math.atan2(oz, ox) / math.pi + 1.0) / 2.0  # Range 0.0 to 1.0
-                        band_idx = int(lon * 13)
-                        band_val = levels[band_idx] / 10.0 if band_idx < len(levels) else 0
-                        
-                        if is_speaking:
-                            # Speaking mode: Audio bands + Front-facing pulsing waves + sparks
-                            front_dist = math.sqrt(nx*nx + ny*ny)
-                            pulse = math.sin(front_dist * 10.0 - t * 8.0) * 0.3 * max(0, 1.0 - front_dist * 1.5)
-                            bright += band_val * lat * 0.5 + pulse + 0.15 + sparkle * 0.5
-                        else:
-                            # Listening mode: Pure audio bands reacting around the surface + sparks
-                            bright += band_val * lat * 0.8 + sparkle * 0.5
-                    else:
-                        # Idle: Just slow breathing shift
-                        bright += math.sin(t) * 0.05
-                    
-                    # Map brightness to character index
-                    idx = int(max(0.0, min(1.0, bright)) * NC + 0.5)
+                    # Base character index calculation based on wave height above threshold
+                    bright = (wave - density_threshold) / (1.0 - density_threshold)
+                    idx = int(bright * NC)
                     idx = max(0, min(NC, idx))
                     ch = chars[idx]
                     
-                    # Mesmerizing color formatting
-                    if is_speaking or (not muted and vol > 0):
-                        if sparkle > 0.2:
-                            # Mesmerizing, flickering neon palette
-                            neon = ["#00FFFF", "#FF00FF", "#FFFF00", "#00FF66", "#FF3399", "#9933FF", "#FFFFFF", "#00CCFF"]
-                            # Rapidly shifting color index based on 3D coordinate and time
-                            cidx = int(abs(math.sin(ox*12 + oz*8 + t*4)) * len(neon)) % len(neon)
-                            
-                            if sparkle > 0.5:
-                                row.append(f"[bold {neon[cidx]}]{ch}[/]")
-                            else:
-                                row.append(f"[{neon[cidx]}]{ch}[/]")
-                        elif is_speaking:
-                            if idx > NC - 2:
-                                row.append(f"[bold cyan]{ch}[/bold cyan]")
-                            elif idx > NC // 2:
-                                row.append(f"[cyan]{ch}[/cyan]")
-                            else:
-                                row.append(f"[dim cyan]{ch}[/dim cyan]")
-                        else: # user speaking (listening)
-                            if idx > NC - 2:
-                                row.append(f"[bold]{ch}[/bold]")
-                            elif idx > NC // 2:
-                                row.append(ch)
-                            else:
-                                row.append(f"[dim]{ch}[/dim]")
-                    else: # idle
-                        if idx > NC - 2:
-                            row.append(f"[bold]{ch}[/bold]")
-                        elif idx > NC // 2:
-                            row.append(ch)
+                    # Rare mesmerising flickers (fireflies)
+                    # High frequency math, only triggered if value > 0.95
+                    sparkle = False
+                    if (math.sin(px2 * 20 - t * 4) * math.cos(py2 * 25 + t * 5) * math.sin(pz2 * 30 - t * 6)) > 0.95:
+                        sparkle = True
+                    
+                    # Evolving liquid color palette based on position, amplitude, and time
+                    if sparkle:
+                        # Rare, intense flickers
+                        colors = ["#FFFFFF", "#FFFFAA", "#AAFFFF", "#FFAAFF"]
+                        cidx = int(abs(px2 * 11 + py2 * 13 + t * 5)) % len(colors)
+                        row.append(f"[bold {colors[cidx]}]{ch}[/]")
+                    else:
+                        # Liquid gradient mapping
+                        if bright > 0.7:
+                            row.append(f"[bold bright_magenta]{ch}[/]" if int(px2 * 10) % 2 == 0 else f"[bold bright_cyan]{ch}[/]")
+                        elif bright > 0.4:
+                            row.append(f"[magenta]{ch}[/]" if int(py2 * 10) % 2 == 0 else f"[cyan]{ch}[/]")
+                        elif bright > 0.1:
+                            row.append(f"[blue]{ch}[/]")
                         else:
-                            row.append(f"[dim]{ch}[/dim]")
+                            row.append(f"[dim blue]{ch}[/dim blue]")
                 else:
                     row.append(" ")
             
