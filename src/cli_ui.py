@@ -104,7 +104,7 @@ def setup_cli_ui():
                 padding=(0, 1),
             )
         
-        # Optimised 3D sphere — mesmerizing rotation, fluid organic surface
+        # Optimised 3D sphere — mesmerizing rotation, sparkling organic surface
         GX, GY = 56, 24
         ASPECT = 2.1  # terminal char aspect ratio compensation
         chars = " .,:;+*#@"
@@ -169,6 +169,16 @@ def setup_cli_ui():
                         math.sin((ox + oz) * 5.0) * 0.1
                     )
                     
+                    # High-frequency sparkling noise
+                    sparkle = 0
+                    if is_speaking or (not muted and vol > 0):
+                        s1 = math.sin(ox * 30.0 + t * 15.0)
+                        s2 = math.cos(oy * 25.0 - t * 12.0)
+                        s3 = math.sin(oz * 35.0 + t * 20.0)
+                        if (s1 * s2 * s3) > 0.4:
+                            lat = max(0.0, 1.0 - abs(oy) * 1.5)
+                            sparkle = (s1 * s2 * s3) * lat * 1.5
+                    
                     # Base directional lighting (top-left, fixed to screen)
                     light = max(0.0, nx * (-0.4) + ny * (-0.6) + nz * 0.6)
                     
@@ -186,29 +196,43 @@ def setup_cli_ui():
                         band_val = levels[band_idx] / 10.0 if band_idx < len(levels) else 0
                         
                         if is_speaking:
-                            # Speaking mode: Audio bands + Front-facing pulsing waves
+                            # Speaking mode: Audio bands + Front-facing pulsing waves + sparks
                             front_dist = math.sqrt(nx*nx + ny*ny)
                             pulse = math.sin(front_dist * 10.0 - t * 8.0) * 0.3 * max(0, 1.0 - front_dist * 1.5)
-                            bright += band_val * lat * 0.5 + pulse + 0.15
+                            bright += band_val * lat * 0.5 + pulse + 0.15 + sparkle
                         else:
-                            # Listening mode: Pure audio bands reacting around the surface
-                            bright += band_val * lat * 0.8
+                            # Listening mode: Pure audio bands reacting around the surface + sparks
+                            bright += band_val * lat * 0.8 + sparkle
                     else:
                         # Idle: Just slow breathing shift
                         bright += math.sin(t) * 0.05
                     
                     # Map brightness to character index
                     idx = int(max(0.0, min(1.0, bright)) * NC + 0.5)
+                    idx = max(0, min(NC, idx))
                     ch = chars[idx]
                     
                     # Color formatting
                     if is_speaking:
-                        if idx > NC - 2:
+                        if sparkle > 0.5:
+                            row.append(f"[bold bright_white]{ch}[/bold bright_white]")
+                        elif sparkle > 0.2:
                             row.append(f"[bold bright_cyan]{ch}[/bold bright_cyan]")
+                        elif idx > NC - 2:
+                            row.append(f"[bold cyan]{ch}[/bold cyan]")
                         elif idx > NC // 2:
                             row.append(f"[cyan]{ch}[/cyan]")
                         else:
                             row.append(f"[dim cyan]{ch}[/dim cyan]")
+                    elif not muted and vol > 0:
+                        if sparkle > 0.5:
+                            row.append(f"[bold bright_yellow]{ch}[/bold bright_yellow]")
+                        elif idx > NC - 2:
+                            row.append(f"[bold]{ch}[/bold]")
+                        elif idx > NC // 2:
+                            row.append(ch)
+                        else:
+                            row.append(f"[dim]{ch}[/dim]")
                     else:
                         if idx > NC - 2:
                             row.append(f"[bold]{ch}[/bold]")
@@ -218,7 +242,9 @@ def setup_cli_ui():
                             row.append(f"[dim]{ch}[/dim]")
                 else:
                     row.append(" ")
-            lines.append("".join(row))
+            # Center the sphere within an 88-character width
+            # Sphere is 56 chars wide. (88 - 56) / 2 = 16 spaces padding
+            lines.append(" " * 16 + "".join(row))
             
         lines.append("")
         
@@ -261,8 +287,9 @@ def setup_cli_ui():
             lines.append("[bold]MIC MUTED[/bold]")
             
         return Panel(
-            Align.center(Text.from_markup("\n".join(lines))), 
+            Text.from_markup("\n".join(lines)), 
             title="[bold]JARVIS[/bold]",
+            width=92,
             padding=(1, 2)
         )
     lk_cli.FrequencyVisualizer.__rich__ = _custom_rich
