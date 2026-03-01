@@ -104,26 +104,26 @@ def setup_cli_ui():
                 padding=(0, 1),
             )
         
-        # Optimised 3D sphere — sparse, liquid, evolving, mesmerising
+        # Optimised 3D sphere — dense, liquid, audio-reactive lava-lamp
         GX, GY = 56, 24
         ASPECT = 2.1  # terminal char aspect ratio compensation
         chars = " .,:;+*#@"
         NC = len(chars) - 1
         lines = []
         
-        # Liquid base radius
+        # Base radius expands with volume
         R = 0.85
         if is_speaking:
-            R += math.sin(t * 2.0) * 0.04
+            R += math.sin(t * 3.0) * 0.03 + (vol / 120.0) * 0.05
         elif vol > 0:
-            R += min(vol / 150.0, 0.05)
+            R += min(vol / 100.0, 0.08)
 
-        # Original tumbling "wobble" rotation
-        spd = 0.8 if is_speaking else 0.3
+        # Tumbling wobble rotation
+        spd = 1.0 if is_speaking else 0.4
         ry = t * spd
         cy, sy = math.cos(ry), math.sin(ry)
         
-        rx = math.sin(t * 0.4) * 0.5  # Tumbling X axis
+        rx = math.sin(t * 0.5) * 0.4  # Tumbling X axis
         cx, sx = math.cos(rx), math.sin(rx)
         
         for y in range(GY):
@@ -139,7 +139,6 @@ def setup_cli_ui():
                     nz = math.sqrt(R * R - d2)
                     
                     # Apply tumbling rotation to the visual coordinates
-                    # This gives the "wobble" of the overall shape
                     px = nx * cy + nz * sy
                     pz = -nx * sy + nz * cy
                     py = ny
@@ -148,50 +147,71 @@ def setup_cli_ui():
                     py2 = py * cx + pz * sx
                     pz2 = -py * sx + pz * cx
                     
-                    # Smooth, slow liquid noise acting as "density"
-                    n1 = math.sin(px2 * 5.0 + t * 1.2) * math.cos(py2 * 4.0 - t * 0.8)
-                    n2 = math.cos((px2 + py2) * 3.0 + t * 1.5)
-                    n3 = math.sin(pz2 * 6.0 - t * 1.0)
+                    # Base structural volumetric noise
+                    n1 = math.sin(px2 * 6.0 + t * 1.5) * math.cos(py2 * 5.0 - t * 1.0)
+                    n2 = math.cos((px2 + py2) * 4.0 + t * 2.0)
+                    n3 = math.sin(pz2 * 5.0 - t * 1.5)
                     
-                    # The wave height defines the "liquid" surface volume
                     wave = (n1 + n2 + n3) / 3.0
                     
+                    # Heavy audio reactivity
+                    # Distort the liquid geometry based on frequency bands spreading across the surface
                     if is_speaking or vol > 0:
-                        # Speech ripples the liquid geometry vividly
-                        wave += math.sin(math.sqrt(px2**2 + py2**2) * 10.0 - t * 8.0) * 0.3 * (vol / 50.0)
+                        lat = max(0.0, 1.0 - abs(py2))
+                        lon = (math.atan2(pz2, px2) / math.pi + 1.0) / 2.0
+                        band_idx = int(lon * 13)
+                        lvl = levels[band_idx] / 10.0 if band_idx < len(levels) else 0
+                        
+                        # Audio creates intense ripples and swelling
+                        ripple_freq = 15.0 + lvl * 5.0
+                        audio_ripple = math.sin(math.sqrt(px2**2 + py2**2) * ripple_freq - t * 12.0) * lvl * 0.8
+                        wave += audio_ripple * lat
+                        
+                        # Overall volume swells the density
+                        wave += (vol / 60.0) * 0.3
                     
-                    # DENSITY THRESHOLD: Not all pixels are lit!
-                    # This makes it sparse, creating floating liquid blobs
-                    density_threshold = 0.15 if is_speaking else 0.25
+                    # DENSITY THRESHOLD: Denser rendering (more pixels lit)
+                    density_threshold = -0.1 if is_speaking else 0.05
                     if wave < density_threshold:
                         row.append(" ")
                         continue
                     
-                    # Base character index calculation based on wave height above threshold
-                    bright = (wave - density_threshold) / (1.0 - density_threshold)
+                    # Calculate brightness
+                    bright = (wave - density_threshold) / (1.0 - density_threshold + 0.5)
+                    
+                    # Add rim lighting for depth
+                    rim = (1.0 - nz / R) ** 2.0 * 0.4
+                    bright += rim
+                    
+                    # Mesmerising flickers (fireflies) - scattered across the density
+                    sparkle = False
+                    # Higher probability of sparks when volume is high
+                    spark_thresh = 0.90 - (min(vol, 100) / 100.0) * 0.1
+                    if (math.sin(px2 * 25 - t * 6) * math.cos(py2 * 28 + t * 7) * math.sin(pz2 * 32 - t * 8)) > spark_thresh:
+                        sparkle = True
+                    
                     idx = int(bright * NC)
                     idx = max(0, min(NC, idx))
                     ch = chars[idx]
                     
-                    # Rare mesmerising flickers (fireflies)
-                    # High frequency math, only triggered if value > 0.95
-                    sparkle = False
-                    if (math.sin(px2 * 20 - t * 4) * math.cos(py2 * 25 + t * 5) * math.sin(pz2 * 30 - t * 6)) > 0.95:
-                        sparkle = True
-                    
-                    # Evolving liquid color palette based on position, amplitude, and time
+                    # Dynamic liquid colors
                     if sparkle:
-                        # Rare, intense flickers
-                        colors = ["#FFFFFF", "#FFFFAA", "#AAFFFF", "#FFAAFF"]
-                        cidx = int(abs(px2 * 11 + py2 * 13 + t * 5)) % len(colors)
+                        colors = ["#FFFFFF", "#FFFFAA", "#AAFFFF", "#FFAAFF", "#FFFF00", "#00FFFF"]
+                        cidx = int(abs(px2 * 15 + py2 * 17 + t * 8)) % len(colors)
                         row.append(f"[bold {colors[cidx]}]{ch}[/]")
                     else:
-                        # Liquid gradient mapping
-                        if bright > 0.7:
-                            row.append(f"[bold bright_magenta]{ch}[/]" if int(px2 * 10) % 2 == 0 else f"[bold bright_cyan]{ch}[/]")
-                        elif bright > 0.4:
-                            row.append(f"[magenta]{ch}[/]" if int(py2 * 10) % 2 == 0 else f"[cyan]{ch}[/]")
-                        elif bright > 0.1:
+                        # Complex gradient mapping
+                        if bright > 0.8:
+                            if int(px2 * 10 + t * 3) % 2 == 0:
+                                row.append(f"[bold bright_magenta]{ch}[/]")
+                            else:
+                                row.append(f"[bold bright_cyan]{ch}[/]")
+                        elif bright > 0.5:
+                            if is_speaking:
+                                row.append(f"[bold bright_blue]{ch}[/]" if bright > 0.65 else f"[bright_magenta]{ch}[/]")
+                            else:
+                                row.append(f"[magenta]{ch}[/]" if int(py2 * 10) % 2 == 0 else f"[cyan]{ch}[/]")
+                        elif bright > 0.2:
                             row.append(f"[blue]{ch}[/]")
                         else:
                             row.append(f"[dim blue]{ch}[/dim blue]")
