@@ -48,11 +48,16 @@ framework with a custom STT → LLM → TTS pipeline (not using `AgentSession`).
 
 ### Key files
 
-- `jarvis/main.py` — Agent entrypoint, plugin wiring, background feeders
-- `jarvis/voice_loop.py` — Core voice loop, LLM streaming, TTS, barge-in
-- `jarvis/voice_queue.py` — Queue for sub-agent results
-- `jarvis/openclaw_stub.py` — OpenClaw interface stub (replace for production)
-- `jarvis/get_token.py` — Helper to generate LiveKit access tokens for testing
+- `src/agent.py` — Agent entrypoint, plugin wiring, core voice loop
+- `src/voice_queue.py` — Queue for sub-agent results
+- `src/openclaw_client.py` — Real OpenClaw integration client
+- `src/openclaw_stub.py` — OpenClaw stub (LLM-powered simulation)
+- `scripts/get_token.py` — Helper to generate LiveKit access tokens for testing
+
+### Documentation
+
+- `docs/architecture.md` — Full architecture specification
+- `docs/research.md` — Research brief and design decisions
 
 ---
 
@@ -161,23 +166,23 @@ python -m venv venv
 source venv/bin/activate
 
 # 2. Install dependencies
-pip install -r requirements.txt
+pip install -e .
 
 # 3. Download Silero VAD model files
-python jarvis/main.py download-files
+python src/agent.py download-files
 
 # 4. Copy and fill in environment variables
-cp jarvis/.env.example jarvis/.env   # or create jarvis/.env manually
+cp .env.example .env
 
 # 5. Run in dev mode
-python jarvis/main.py dev
+python src/agent.py dev
 ```
 
 ### Testing in the playground
 
 ```bash
 # Generate a token with JARVIS dispatch attached
-python jarvis/get_token.py
+python scripts/get_token.py
 # Open https://agents-playground.livekit.io/ and paste the URL + token
 ```
 
@@ -186,8 +191,8 @@ python jarvis/get_token.py
 ## Security
 
 - **Never commit `.env`** — it is in `.gitignore`
-- API keys are loaded via `python-dotenv` from `jarvis/.env`
-- `get_token.py` is a local dev helper only — do not expose token
+- API keys are loaded via `python-dotenv` from `.env` in the project root
+- `scripts/get_token.py` is a local dev helper only — do not expose token
   generation to the public
 - The LiveKit API key and secret give full room control — treat them
   like database credentials

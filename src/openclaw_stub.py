@@ -112,7 +112,7 @@ async def dispatch_openclaw_stub(directive: str, queue: VoiceLLMQueue) -> None:
     try:
         client = _get_client()
         response = await client.aio.models.generate_content(
-            model="gemini-2.0-flash-001",
+            model="gemini-3.1-flash-lite-preview",
             contents=f"Directive: {directive}\n\nGenerate a realistic JSON result for this task.",
             config=genai_types.GenerateContentConfig(
                 system_instruction=STUB_SYSTEM_PROMPT,
