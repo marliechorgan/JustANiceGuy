@@ -28,7 +28,7 @@ The Voice LLM acts solely as the **Front Desk Receptionist**. It hears the user,
 
 ```python
 dispatch_openclaw(
-    directive="Check Charlie's recent GitHub commits and search his inbox "
+    directive="Check the user's recent GitHub commits and search their inbox "
               "for emails from the label manager about a contract"
 )
 ```
@@ -217,8 +217,8 @@ LLM generates:
                                                             in real-time
 
   [tool_call: dispatch_openclaw(                           ← native tool call
-      directive="Check Charlie's inbox and look up          processed after
-      current Tesla stock price"                            text completes
+      directive="Check my inbox and look up                 processed after
+                  current Tesla stock price"                            text completes
   )]
 
   [tool_call: set_turn_mode(mode="ACKWAIT")]               ← turn mode set
@@ -582,8 +582,8 @@ Voice LLM output:
 
   Tool calls:
     dispatch_openclaw(
-      directive="Check Charlie's recent GitHub commits on the ACI repo
-                 and search his email inbox for messages from the label
+      directive="Check the user's recent GitHub commits on the ACI repo
+                 and search their email inbox for messages from the label
                  manager about a contract"
     )
     set_turn_mode(mode="ACKWAIT")

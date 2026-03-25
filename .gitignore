@@ -39,3 +39,10 @@ uv.lock
 
 # Backups
 .backup-*/
+
+# Dev/test directory (legacy)
+jarvis/
+
+# AI coding assistants
+.gemini/
+.agents/

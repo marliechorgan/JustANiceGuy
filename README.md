@@ -154,7 +154,7 @@ JARVIS uses [OpenClaw](https://github.com/marliechorgan/openclaw) as its agent s
 JARVIS calls the `openclaw agent` CLI under the hood:
 
 ```bash
-openclaw agent --agent main --message "Check Charlie's inbox" --json
+openclaw agent --agent main --message "Check my inbox for anything urgent" --json
 ```
 
 OpenClaw's Gateway handles routing, agent selection, and execution. JARVIS never needs to know which sub-agent handles email, GitHub, calendar, etc. — it just describes what needs to happen in plain English.
@@ -211,6 +211,7 @@ See [`.env.example`](.env.example) for all variables. Key settings:
 | `DEEPGRAM_API_KEY` | ✅ | — | Deepgram STT API key |
 | `GEMINI_API_KEY` | ✅ | — | Google Gemini API key |
 | `ELEVENLABS_API_KEY` | ✅ | — | ElevenLabs TTS API key |
+| `USER_NAME` | | `sir` | Your name — JARVIS will address you by name |
 | `GEMINI_MODEL` | | `gemini-3-flash-preview` | Gemini model to use |
 | `ELEVENLABS_MODEL` | | `eleven_flash_v2_5` | ElevenLabs TTS model |
 | `ELEVENLABS_VOICE_ID` | | `lUTamkMw7gOzZbFIwmq4` | Voice ID ([browse voices](https://elevenlabs.io/voice-library)) |
