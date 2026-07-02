@@ -1,5 +1,7 @@
 # Research Brief: JARVIS Voice Agent — Build from LiveKit Starter
 
+> **Historical document.** This was the build-time research brief used to plan the original implementation. It is kept for provenance; the questions it poses were answered (custom loop, not `AgentSession`) and the system has since moved on (default backend is now headless Claude Code, see README). File paths it references reflect the pre-build repo state.
+
 **Purpose:** This document provides full context for a research AI agent to determine the optimal approach for building the JARVIS voice agent described in `jarvis-voice-architecture.md`, starting from the official LiveKit agent starter and avoiding overcomplication.
 
 ---

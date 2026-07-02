@@ -34,6 +34,12 @@ env/
 logs/
 *.log
 
+# Per-target Claude Code resume-session ids (runtime state)
+.jarvis_claude_sessions.json
+
+# Live event bus (runtime telemetry for the in-console sessions view)
+logs/live_events.jsonl
+
 # Lock files (generated — users should install from pyproject.toml)
 uv.lock
 

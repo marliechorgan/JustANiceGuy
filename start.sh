@@ -10,7 +10,17 @@ cd "$(dirname "$0")"
 # Colors
 R='\033[0;31m'  G='\033[0;32m'  C='\033[0;36m'  D='\033[2m'  B='\033[1m'  NC='\033[0m'
 
-echo -e "${C}${B}JARVIS${NC}"
+# ── Session mode ─────────────────────────────
+# Usage: ./start.sh [defyner|personal]   (default: personal)
+# Chosen before launch so the voice agent gets a domain-tailored system prompt
+# and dispatches default to that context (Defyner repo vs life-OS root).
+export JARVIS_MODE="${1:-${JARVIS_MODE:-personal}}"
+if [ "$JARVIS_MODE" != "defyner" ] && [ "$JARVIS_MODE" != "personal" ]; then
+    echo -e "${R}Invalid mode '$JARVIS_MODE'. Use: ./start.sh [defyner|personal]${NC}"
+    exit 1
+fi
+
+echo -e "${C}${B}JARVIS${NC}  ${D}mode:${NC} ${B}${JARVIS_MODE}${NC}"
 echo ""
 
 # ── Virtual environment ──────────────────────
@@ -57,8 +67,12 @@ fi
 echo -e "${D}LLM:  ${GEMINI_MODEL:-gemini-3-flash-preview}${NC}"
 echo -e "${D}TTS:  ElevenLabs (${ELEVENLABS_MODEL:-eleven_flash_v2_5})${NC}"
 echo -e "${D}STT:  Deepgram${NC}"
+echo -e "${D}Doer: Claude Code (${CLAUDE_MODEL:-claude-sonnet-4-6}) → ${JARVIS_MODE} context${NC}"
 echo ""
-echo -e "${G}${B}Starting...${NC} ${D}Press [m] mute | [l] logs${NC}"
+echo -e "${G}${B}Starting...${NC} ${D}[m] mute | [l] logs | [v] paste context${NC}"
+echo -e "${D}[s] Claude sessions  ·  ↑/↓ select  ·  ↵ enter session  ·  Esc release  ·  [c] copy resume${NC}"
 echo ""
 
-PYTHONPATH=src python src/agent.py console
+# exec so python replaces this shell and directly owns the TTY — no orphaned
+# wrapper process, and terminal-close signals go straight to the agent.
+exec env PYTHONPATH=src python src/agent.py console

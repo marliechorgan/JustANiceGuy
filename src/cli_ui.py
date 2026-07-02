@@ -6,8 +6,10 @@ Provides:
 """
 import time
 import math
+import shutil
 import threading
 import logging
+from collections import deque
 from rich.panel import Panel
 from rich.text import Text
 from rich.align import Align
@@ -51,6 +53,176 @@ class UIState:
     # Last TTFB for display
     last_ttfb_ms = 0
 
+    # Pasted-context inbox: the keypress thread appends clipboard text here
+    # (via the 'v' hotkey); the agent loop drains it into the LLM chat context
+    # before the next generation. Guarded by a lock for cross-thread safety.
+    pending_context: list[str] = []
+    context_lock = threading.Lock()
+    last_context_info = ""   # e.g. "context added: 1,240 chars" (shown in UI)
+
+    # Live Claude-session view: claude_client._emit feeds these in-process so the
+    # console can show, in real time, what each headless session is doing.
+    show_sessions = False                 # toggled by the 's' hotkey
+    sessions: dict = {}                   # dispatch_id -> live session state
+    session_events = deque(maxlen=200)    # rolling activity feed (raw event dicts)
+    sessions_lock = threading.Lock()
+
+    # Navigation + "enter into a session" (bidirectional control).
+    selected_idx = 0                      # highlighted row in the sessions list
+    ordered_dids: list = []               # render writes the current row order here
+    entered = False                       # True = drilled into the active session
+    active_session_id = None              # voice dispatches resume THIS session
+    active_session_target = None          # cwd/target of the entered session
+
+    @classmethod
+    def push_event(cls, rec: dict) -> None:
+        """Fold a claude_client event into live session state (same process)."""
+        kind = rec.get("kind")
+        did = rec.get("id")
+        tgt = rec.get("target")
+        now = rec.get("ts") or time.time()
+        with cls.sessions_lock:
+            s = cls.sessions.get(did)
+            if kind == "dispatch_start":
+                cls.sessions[did] = {
+                    "target": tgt, "directive": rec.get("directive", ""),
+                    "status": "running", "started": now, "last": now,
+                    "tools": 0, "cost": 0.0,
+                    "session_id": rec.get("resume"), "activity": "starting…",
+                }
+            elif s is not None:
+                s["last"] = now
+                if kind == "session":
+                    s["session_id"] = rec.get("session_id") or s.get("session_id")
+                elif kind == "tool":
+                    s["tools"] += 1
+                    d = rec.get("detail", "")
+                    s["activity"] = f"{rec.get('name','')}  {d}".strip()
+                elif kind == "text":
+                    s["activity"] = rec.get("text", "")[:90]
+                elif kind == "result":
+                    s["status"] = "done" if rec.get("ok") else "error"
+                    s["cost"] = rec.get("cost", 0.0)
+                    s["session_id"] = rec.get("session_id") or s.get("session_id")
+                    s["activity"] = "done"
+                elif kind == "error":
+                    s["status"] = "error"
+                    s["activity"] = rec.get("error", "error")[:90]
+            cls.session_events.append(rec)
+            # Keep memory bounded: retain the 12 most-recent dispatches.
+            if len(cls.sessions) > 12:
+                for k in list(cls.sessions)[:-12]:
+                    cls.sessions.pop(k, None)
+
+
+_TARGET_DIRS = {"defyner": "~/Defyner", "personal": "~"}
+
+
+def _target_color(t: str) -> str:
+    return {"defyner": "cyan", "personal": "green"}.get(t, "white")
+
+
+def _ordered_sessions() -> list:
+    """Sessions sorted as the view shows them: active first, then most recent."""
+    with UIState.sessions_lock:
+        items = list(UIState.sessions.items())
+    items.sort(key=lambda kv: (0 if kv[1]["status"] == "running" else 1, -kv[1]["last"]))
+    return items
+
+
+_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_KIND_ICON = {"tool": "⚒", "text": "›", "result": "[green]✓[/]",
+              "error": "[red]✗[/]", "dispatch_start": "▶", "session": "·"}
+
+
+def _panel_dims():
+    """Responsive panel size from the live terminal (fills the window)."""
+    term = shutil.get_terminal_size((100, 40))
+    width = max(72, min(term.columns - 2, 170))
+    inner = width - 8                 # text width inside borders + padding
+    body_rows = max(8, min(term.lines - 12, 36))
+    return width, inner, body_rows
+
+
+def _fit(s: str, w: str) -> str:
+    s = str(s).replace("\n", " ")
+    return s if len(s) <= w else s[: max(0, w - 1)] + "…"
+
+
+def render_sessions_panel() -> Panel:
+    """In-console live view of the headless Claude sessions. 's' toggles it;
+    ↑/↓ select a session; Enter drills in (and routes your voice to it); Esc
+    releases. Detail view shows that session's recent turns."""
+    from rich.markup import escape as esc
+    now = time.time()
+    width, inner, body_rows = _panel_dims()
+    spin = _SPINNER[int(now * 10) % len(_SPINNER)]
+    rule = "[dim]" + "─" * inner + "[/dim]"
+    items = _ordered_sessions()
+    UIState.ordered_dids = [did for did, _ in items]
+
+    def ev_text(e):
+        if e.get("kind") == "tool":
+            return f"{e.get('name','')} {e.get('detail','')}".strip()
+        return (e.get("text") or e.get("directive") or e.get("error")
+                or e.get("name") or e.get("kind") or "")
+
+    # ── Entered/detail view: drilled into the active session ────────────────
+    if UIState.entered and UIState.active_session_id:
+        active = UIState.active_session_id
+        with UIState.sessions_lock:
+            dids = {d for d, s in UIState.sessions.items() if s.get("session_id") == active}
+            events = [e for e in UIState.session_events if e.get("id") in dids]
+        sess = next((s for _, s in items if s.get("session_id") == active), None)
+        tgt = (sess or {}).get("target", UIState.active_session_target or "")
+        tc = _target_color(tgt)
+        running = (sess or {}).get("status") == "running"
+        live = f"[yellow]{spin} live[/]" if running else "[green]done[/]"
+        lines = [f"[reverse {tc}] ENTERED · {tgt} [/]  {live}   "
+                 "[dim]your voice now talks to this session[/dim]", ""]
+        for e in events[-body_rows:]:
+            icon = _KIND_ICON.get(e.get("kind"), "·")
+            lines.append(f"{icon} {esc(_fit(ev_text(e), inner - 2))}")
+        if not events:
+            lines.append("[dim](no activity captured yet)[/dim]")
+        lines.append(rule)
+        lines.append(f"[dim]session[/] {active[:8]}…   "
+                     r"[dim]\[Esc] release  ·  \[c] copy resume cmd  ·  \[s] close[/dim]")
+        return Panel(Text.from_markup("\n".join(lines)),
+                     title=f"[bold]► {tgt} session[/bold]", width=width, padding=(1, 2))
+
+    # ── List view: pick a session ───────────────────────────────────────────
+    lines = []
+    if not items:
+        lines.append("[dim]No Claude sessions yet — ask JARVIS something, then come back.[/dim]")
+    else:
+        UIState.selected_idx = max(0, min(UIState.selected_idx, len(items) - 1))
+    status_icon = {"running": f"[yellow]{spin}[/]", "done": "[green]✓[/]", "error": "[red]✗[/]"}
+    for i, (did, s) in enumerate(items[:6]):
+        tc = _target_color(s["target"])
+        ic = status_icon.get(s["status"], "●")
+        el = int(now - s["started"])
+        sel = (i == UIState.selected_idx)
+        cur = "[bold white]▸[/]" if sel else " "
+        lines.append(f"{cur} {ic} [bold]{did}[/] [{tc}]{s['target']}[/]  "
+                     f"{el}s  ⚒{s['tools']}  ${s['cost']:.3f}   "
+                     f"[dim]{esc(_fit(s.get('activity',''), inner - 40))}[/dim]")
+
+    lines.append(rule)
+    lines.append("[dim]live activity (all sessions)[/dim]")
+    with UIState.sessions_lock:
+        feed = list(UIState.session_events)[-(body_rows - len(items)):]
+    for e in feed:
+        tgt = e.get("target", "")
+        tc = _target_color(tgt)
+        icon = _KIND_ICON.get(e.get("kind"), "·")
+        lines.append(f"[{tc}]{tgt[:3]:<3}[/] {icon} {esc(_fit(ev_text(e), inner - 8))}")
+
+    lines.append(rule)
+    lines.append(r"[dim]↑/↓ select  ·  ↵ enter session  ·  \[c] copy resume  ·  \[s] close[/dim]")
+    return Panel(Text.from_markup("\n".join(lines)),
+                 title=f"[bold]JARVIS · Claude sessions[/bold]  {spin}", width=width, padding=(1, 2))
+
 
 def setup_cli_ui():
     """Monkey-patches the LiveKit Agents CLI to provide a pixelated avatar UI."""
@@ -83,6 +255,13 @@ def setup_cli_ui():
         levels = getattr(self, "_levels_idx", [0]*14)
         vol = sum(levels)
         
+        # Live Claude-sessions view takes over the panel when toggled ('s').
+        if UIState.show_sessions:
+            try:
+                return render_sessions_panel()
+            except Exception:
+                pass  # never let the view crash the render loop
+
         # When logs are visible, collapse to a minimal one-line status
         if not UIState.ui_mode:
             parts = ["JARVIS"]
@@ -96,6 +275,8 @@ def setup_cli_ui():
                 parts.append(UIState.openclaw_status)
             else:
                 parts.append("[dim]idle[/dim]")
+            if UIState.last_context_info:
+                parts.append(f"[cyan]{UIState.last_context_info}[/cyan]")
             errs = {k: v for k, v in UIState.session_errors.items() if v > 0}
             if errs:
                 parts.append(" ".join(f"{k}:{v}" for k, v in errs.items()))
@@ -243,6 +424,12 @@ def setup_cli_ui():
                     break
                 elif ch == "?" and visualizer is not None:
                     visualizer.show_shortcuts = not visualizer.show_shortcuts
+                elif ch == key.ESC and UIState.show_sessions and UIState.entered:
+                    # Release the entered session → voice returns to normal routing.
+                    UIState.entered = False
+                    UIState.active_session_id = None
+                    UIState.active_session_target = None
+                    print("\033c", end="", flush=True)
                 elif ch == key.ESC and visualizer is not None:
                     visualizer.show_shortcuts = False
                 elif isinstance(ch, str) and ch.lower() == "m":
@@ -253,6 +440,77 @@ def setup_cli_ui():
                     if UIState.ui_mode:
                         # Clear all log output from the screen
                         print("\033c", end="", flush=True)
+                elif isinstance(ch, str) and ch.lower() == "v":
+                    # Paste context: ingest the macOS clipboard into the LLM
+                    # context (for mermaid diagrams, articles, big text chunks).
+                    # The user copies anything anywhere, then presses 'v' here.
+                    try:
+                        import subprocess
+                        text = subprocess.run(
+                            ["pbpaste"], capture_output=True, text=True, timeout=5
+                        ).stdout
+                    except Exception:
+                        text = ""
+                    text = (text or "").strip()
+                    if text:
+                        # Cap to keep the context window sane (~80k chars).
+                        if len(text) > 80_000:
+                            text = text[:80_000] + "\n[...truncated]"
+                        with UIState.context_lock:
+                            UIState.pending_context.append(text)
+                        UIState.last_context_info = f"context added: {len(text):,} chars"
+                    else:
+                        UIState.last_context_info = "clipboard empty — nothing pasted"
+                elif isinstance(ch, str) and ch.lower() == "s":
+                    # Toggle the live Claude-sessions view.
+                    UIState.show_sessions = not UIState.show_sessions
+                    UIState.entered = False
+                    if UIState.show_sessions:
+                        print("\033c", end="", flush=True)
+                elif UIState.show_sessions and ch == key.UP:
+                    UIState.selected_idx = max(0, UIState.selected_idx - 1)
+                elif UIState.show_sessions and ch == key.DOWN:
+                    UIState.selected_idx = min(
+                        max(0, len(UIState.ordered_dids) - 1),
+                        UIState.selected_idx + 1)
+                elif UIState.show_sessions and ch in (key.ENTER, key.CR, key.LF):
+                    # Enter into the highlighted session → route voice to it.
+                    dids = UIState.ordered_dids
+                    if 0 <= UIState.selected_idx < len(dids):
+                        with UIState.sessions_lock:
+                            s = UIState.sessions.get(dids[UIState.selected_idx])
+                        if s and s.get("session_id"):
+                            UIState.active_session_id = s["session_id"]
+                            UIState.active_session_target = s["target"]
+                            UIState.entered = True
+                            print("\033c", end="", flush=True)
+                        else:
+                            UIState.last_context_info = "session has no id yet"
+                elif isinstance(ch, str) and ch.lower() == "c":
+                    # Copy the most-recent session's resume command to clipboard.
+                    with UIState.sessions_lock:
+                        items = sorted(UIState.sessions.values(),
+                                       key=lambda s: -s["last"])
+                    sid = next((s.get("session_id") for s in items
+                                if s.get("session_id")), None)
+                    tgt = next((s["target"] for s in items
+                                if s.get("session_id")), "personal")
+                    if sid:
+                        # Use the same world the session was created in: claudew
+                        # for Defyner (sets CLAUDE_CONFIG_DIR + work account + cd),
+                        # plain claude for personal.
+                        if tgt == "defyner":
+                            cmd = f"claudew --resume {sid}"
+                        else:
+                            cmd = f"cd ~ && claude --resume {sid}"
+                        try:
+                            import subprocess
+                            subprocess.run(["pbcopy"], input=cmd, text=True, timeout=5)
+                            UIState.last_context_info = f"resume cmd copied ({tgt})"
+                        except Exception:
+                            UIState.last_context_info = "copy failed"
+                    else:
+                        UIState.last_context_info = "no session to resume yet"
 
         listener = threading.Thread(target=_listen_for_keys, daemon=True)
         listener.start()

@@ -1,5 +1,7 @@
 # JARVIS Voice Architecture: Real-Time Voice Agent with Async Sub-Agents
 
+> **Status note.** This is the original design specification, written against OpenClaw as the agent backend. The system as built keeps this architecture but the default backend is now a **headless Claude Code session** (`src/claude_client.py`): per-target resumable sessions, live tool-event narration, and terminal take-over via `claude --resume`. OpenClaw remains supported behind the same one-function contract, `dispatch_fn(directive, queue)`. See the README for the current feature set (live sessions panel, voice take-over, paste-in context). Where this document says "OpenClaw", read "the configured agent backend".
+
 ## The Core Idea (in one paragraph)
 
 When the user speaks, their audio is transcribed (STT) and sent to a Voice LLM. The LLM streams natural conversational text **directly to TTS** — no JSON wrapping, no parsing layer, no fragile streaming hacks. The user hears JARVIS respond in ~300ms. If the LLM needs to dispatch work, it calls a single native tool: `dispatch_openclaw(directive)`, passing a clean natural language task string. OpenClaw receives the directive, handles all routing, agent selection, and execution autonomously — the Voice LLM never needs to know the internal API surface of any sub-agent. Results flow back into the **conversation history** as tool messages, giving the LLM persistent memory of everything that's happened. The LLM controls pacing through a `set_turn_mode` tool: `ACKWAIT` (wait for sub-agent results), `CONTINUE` (re-run immediately, checking the queue for new context before speaking the next 1–2 sentences), `CONV` (open mic), or `END` (close session). The result: a voice agent that acknowledges instantly, works in the background via OpenClaw, and speaks results naturally — like JARVIS.
@@ -870,110 +872,6 @@ Treat these as data you've retrieved. Present them naturally.
 - **LangGraph / AutoGen** — OpenClaw handles agent orchestration. No additional framework needed in the voice layer.
 
 - **Persistent memory across sessions** — Handled in OpenClaw's existing memory architecture, not the voice layer.
-
----
-
-## The Market Opportunity
-
-Recent market data from late 2025 and early 2026 shows that viral AI apps are pulling in staggering numbers. Solo developers leveraging TikTok have scaled novelty AI apps to $800,000 in revenue in a single year, and viral AI tools have hit $1 million in ARR in just 7 days.
-
-JARVIS has two properties that make it uniquely positioned to exploit this: an undeniable demo (the kind of thing people film their reaction to) and an architecture that makes each session absurdly cheap to serve.
-
-### The Hyper-Viral Weekend
-
-Imagine you post a raw, unedited video of you walking around your room, interrupting JARVIS mid-sentence while it searches the live web, and it adapts perfectly.
-
-| Metric | Value |
-|---|---|
-| **Viral Reach** | 10,000,000 views across TikTok + X |
-| **Click-Through Rate** | 5% (highly engaging demo) → 500,000 visitors |
-| **Impulse Buy Conversion** | 10% at £2 for 5 minutes of magic (zero sign-up friction, Apple Pay) → 50,000 paid sessions |
-| **Gross Revenue (48 hours)** | **50,000 × £2.00 = £100,000** |
-
-### The Unfair Profit Margin
-
-Because this architecture appends sub-agent results to the conversation history as tool messages, the system prompt stays static. This enables prompt caching, which slashes token costs by ~80%.
-
-Even using top-tier streaming TTS and LLMs, the cost for a 5-minute session is approximately **£0.38**.
-
-| | |
-|---|---|
-| **Total API Cost** | 50,000 sessions × £0.38 = £19,000 |
-| **Weekend Net Profit** | **£81,000** |
-
-And that doesn't account for the fact that people will want to show their friends. If just 30% of those users drop another £2 to show their roommate how cool it is, you break the **£100,000 profit mark** in a matter of days.
-
-### Why The Demo Will Actually Convert
-
-JARVIS won't look like another ChatGPT wrapper — it will feel like a leap into the future because of the mechanics baked into this architecture:
-
-**The 300ms Magic.** When users push the mic button, the LLM's text tokens stream to TTS immediately. They hear JARVIS respond in ~300ms. That instant reaction triggers the "wow" factor that no turn-based chatbot can replicate.
-
-**The Stream-of-Consciousness.** Because of the `CONTINUE` turn mode, JARVIS speaks 1–2 sentences, checks the queue for new search results, and weaves them into its next sentence without awkward pauses. It sounds like it's thinking out loud — not reading from a script.
-
-**The Flawless Interruption.** If they try to test the system by yelling over it, LiveKit's VAD triggers, stops the TTS immediately, and logs the partial speech as `[INTERRUPTED]`. JARVIS instantly adapts to their rudeness, which makes for incredible viral video moments.
-
----
-
-## The Viral Demo Script
-
-The secret to a viral tech demo: keep it under 30 seconds, show a "wait, what?" moment immediately, and focus on one mind-blowing feature at a time.
-
-This script flexes the three most magical parts of the architecture: the ~300ms latency, the LiveKit VAD barge-in, and the `CONTINUE` state mid-thought weaving.
-
-### Camera Setup
-
-Film POV style (from your chest or holding your phone). Point the camera at your laptop screen showing two things side-by-side:
-
-- **Left Side:** Your terminal, showing the raw streaming logs and the VoiceLLMQueue.
-- **Right Side:** Your live email inbox or a blank code editor.
-
-### The 30-Second Script
-
-**[0:00 — The Hook]**
-Don't say "Hey Jarvis." Just start talking fast while typing.
-
-> **You:** "Jarvis, read my last email and run a web search on Tesla stock."
-
-**[0:03 — The ACKWAIT Latency Flex]**
-Instantly — within ~300ms — the terminal lights up with streaming tokens.
-
-> **Jarvis (Audio):** "I'll pull your inbox and check the markets now, sir."
-
-Point to the screen where the terminal shows `turn_mode: ACKWAIT`.
-
-**[0:08 — The "Rude" Barge-In Flex]**
-Jarvis starts reading the search results:
-
-> **Jarvis:** "Tesla is currently trading at—"
-
-Abruptly yell over him.
-
-> **You:** "Actually, skip the stock! Just give me the email!"
-
-The terminal instantly flashes `[INTERRUPTED]` as the LiveKit VAD detects your voice and stops the TTS.
-
-**[0:15 — The CONTINUE Mid-Thought Flex]**
-Because the system appended the interruption to the conversation history, Jarvis instantly understands he was cut off.
-
-> **Jarvis:** "Right, skipping the markets. You have an email from your boss about the..."
-
-Right as Jarvis says this, push a button on your keyboard that triggers a "Breaking News" alert into your VoiceLLMQueue. Because Jarvis uses the `CONTINUE` loop, he checks the queue between his first and second sentence.
-
-> **Jarvis (without pausing):** "...Oh, and you actually just got a calendar invite for a meeting in 10 minutes. Want me to accept it?"
-
-**[0:25 — The Call to Action]**
-Look directly into the camera.
-
-> **You:** "It actually thinks in real-time. Try it yourself right now for 2 quid. Link in bio."
-
-### Why This Goes Viral
-
-**It breaks the ChatGPT mold.** People are used to AI that forces you to wait in silence, listen to a wall of text, and start over if you make a mistake. Seeing an AI stop mid-sentence when interrupted and instantly pivot looks like magic.
-
-**The visual proof.** Seeing the `[INTERRUPTED]` log and the sub-agent results flushing into the conversation history as tool messages proves this isn't a fake, pre-recorded video. It is raw, working code.
-
-**The stream-of-consciousness effect.** When Jarvis weaves that calendar invite into his speech mid-thought, it creates a breathing, adaptive agent that sounds incredibly human.
 
 ---
 
