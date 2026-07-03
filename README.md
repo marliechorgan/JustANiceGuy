@@ -39,7 +39,7 @@ User speaks → STT transcript → Voice LLM → Streamed TTS (instant)
 | **Voice LLM** | [Google Gemini](https://ai.google.dev/) (`gemini-3.5-flash`, thinking LOW) |
 | **TTS** | [ElevenLabs](https://elevenlabs.io/) (`eleven_flash_v2_5`, streaming) |
 | **VAD** | [Silero](https://github.com/snakers4/silero-vad) |
-| **Agent backend** | **Headless [Claude Code](https://claude.com/claude-code) (default)** · [OpenClaw](https://github.com/marliechorgan/openclaw) · built-in stub |
+| **Agent backend** | **Headless [Claude Code](https://claude.com/claude-code) (default)** · OpenClaw · built-in stub |
 
 ---
 
@@ -148,7 +148,7 @@ The voice LLM dispatches tasks in plain English. No structured parameters, no ag
 
 ### OpenClaw
 
-Set `USE_OPENCLAW=true` to route directives to the [OpenClaw](https://github.com/marliechorgan/openclaw) CLI instead. Same contract: one natural-language directive in, results pushed to the queue.
+Set `USE_OPENCLAW=true` to route directives to the OpenClaw CLI instead. Same contract: one natural-language directive in, results pushed to the queue.
 
 ### Stub
 
