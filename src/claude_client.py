@@ -39,9 +39,9 @@ from cli_ui import UIState
 logger = logging.getLogger("niceguy.claude")
 
 # ─── Config (all overridable via .env) ──────────────────────────────────────
-# Sonnet 4.6: faster + cheaper than Opus for the doer role, and strong enough
+# Sonnet 5: faster + cheaper than Opus for the doer role, and strong enough
 # for investigation/dispatch. Override with CLAUDE_MODEL.
-DEFAULT_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+DEFAULT_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5")
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 AGENT_TIMEOUT = int(os.environ.get("CLAUDE_TIMEOUT", "300"))
 
