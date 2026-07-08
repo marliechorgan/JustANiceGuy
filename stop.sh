@@ -14,9 +14,9 @@ for pid in $(pgrep -f "agent.py console" 2>/dev/null); do
     kill -TERM "$pid" 2>/dev/null && { echo -e "${G}stopped${NC} agent.py console ${D}(pid $pid)${NC}"; killed=$((killed+1)); }
 done
 
-# 2) JARVIS's headless Claude doers — scoped to the sonnet model JARVIS launches
+# 2) JARVIS's headless Claude doers — scoped to the model JARVIS launches
 #    with -p. This will NOT match your interactive Claude app (opus / no `-p`).
-for pid in $(pgrep -f "claude -p .*claude-sonnet-4-6" 2>/dev/null); do
+for pid in $(pgrep -f "claude -p .*${CLAUDE_MODEL:-claude-sonnet-5}" 2>/dev/null); do
     kill -TERM "$pid" 2>/dev/null && { echo -e "${G}stopped${NC} claude doer ${D}(pid $pid)${NC}"; killed=$((killed+1)); }
 done
 

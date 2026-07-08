@@ -67,7 +67,7 @@ fi
 echo -e "${D}LLM:  ${GEMINI_MODEL:-gemini-3-flash-preview}${NC}"
 echo -e "${D}TTS:  ElevenLabs (${ELEVENLABS_MODEL:-eleven_flash_v2_5})${NC}"
 echo -e "${D}STT:  Deepgram${NC}"
-echo -e "${D}Doer: Claude Code (${CLAUDE_MODEL:-claude-sonnet-4-6}) → ${JARVIS_MODE} context${NC}"
+echo -e "${D}Doer: Claude Code (${CLAUDE_MODEL:-claude-sonnet-5}) → ${JARVIS_MODE} context${NC}"
 echo ""
 echo -e "${G}${B}Starting...${NC} ${D}[m] mute | [l] logs | [v] paste context${NC}"
 echo -e "${D}[s] Claude sessions  ·  ↑/↓ select  ·  ↵ enter session  ·  Esc release  ·  [c] copy resume${NC}"
